@@ -105,42 +105,55 @@ function handleDeleteCancel() {
 <template>
   <ConfigView v-if="auth.mode === 'config'" />
 
-  <main v-else class="page">
-    <section class="shell">
-      <header class="title">
-        <h1>服务器登录</h1>
-        <p class="subtitle">请选择服务器继续，或登录新服务器。</p>
-      </header>
+  <div v-else class="auth-layout">
+    <!-- 左侧品牌面板 -->
+    <aside class="brand-panel">
+      <div class="brand-inner">
+        <div class="brand-icon">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
+            <rect x="1" y="3" width="30" height="7" rx="2.5" fill="white" opacity="0.3" />
+            <rect x="1" y="12" width="30" height="7" rx="2.5" fill="white" opacity="0.6" />
+            <rect x="1" y="21" width="30" height="7" rx="2.5" fill="white" opacity="0.9" />
+          </svg>
+        </div>
+        <h1 class="brand-name">CPA Codex</h1>
+        <p class="brand-tagline">后台常驻<br>轻松管理服务器连接</p>
+      </div>
+    </aside>
 
-      <LoginPromptBar
-        v-if="auth.mode === 'prompt' && auth.lastAccount"
-        :account="auth.lastAccount"
-        :loading="auth.loading"
-        @confirm="handlePromptConfirm"
-        @cancel="handlePromptCancel"
-      />
+    <!-- 右侧表单面板 -->
+    <main class="form-panel">
+      <div class="form-inner">
+        <LoginPromptBar
+          v-if="auth.mode === 'prompt' && auth.lastAccount"
+          :account="auth.lastAccount"
+          :loading="auth.loading"
+          @confirm="handlePromptConfirm"
+          @cancel="handlePromptCancel"
+        />
 
-      <AccountListView
-        v-if="auth.mode === 'list'"
-        :accounts="auth.accounts"
-        :loading="auth.loading"
-        @login="handleAccountLogin"
-        @remove="handleDeleteAccount"
-        @new="auth.enterForm"
-      />
+        <AccountListView
+          v-if="auth.mode === 'list'"
+          :accounts="auth.accounts"
+          :loading="auth.loading"
+          @login="handleAccountLogin"
+          @remove="handleDeleteAccount"
+          @new="auth.enterForm"
+        />
 
-      <LoginFormView
-        v-if="auth.mode === 'form'"
-        :loading="auth.loading"
-        :has-accounts="auth.hasAccounts"
-        :default-remember="auth.rememberPassword"
-        @submit="handleNewLogin"
-        @back="auth.enterList"
-      />
+        <LoginFormView
+          v-if="auth.mode === 'form'"
+          :loading="auth.loading"
+          :has-accounts="auth.hasAccounts"
+          :default-remember="auth.rememberPassword"
+          @submit="handleNewLogin"
+          @back="auth.enterList"
+        />
 
-      <p v-if="auth.error" class="error">{{ auth.error }}</p>
-    </section>
-  </main>
+        <p v-if="auth.error" class="form-error">{{ auth.error }}</p>
+      </div>
+    </main>
+  </div>
 
   <PasswordDialog
     :open="passwordDialogOpen"
@@ -163,43 +176,70 @@ function handleDeleteCancel() {
 </template>
 
 <style scoped>
-.page {
-  min-height: 100vh;
-  background: #f1f5f9;
+.auth-layout {
   display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 40px 16px;
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
 }
 
-.shell {
-  width: 100%;
-  max-width: 640px;
+/* 左侧品牌面板 */
+.brand-panel {
+  width: 260px;
+  flex-shrink: 0;
+  background: #18181B;
+  display: flex;
+  align-items: center;
+  padding: 40px 32px;
+  user-select: none;
+}
+
+.brand-inner {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  font-family: "Source Sans 3", "Noto Sans SC", system-ui, sans-serif;
-  color: #0f172a;
 }
 
-.title {
+.brand-icon {
+  display: flex;
+}
+
+.brand-name {
+  font-size: 22px;
+  font-weight: 700;
+  color: #FFFFFF;
+  letter-spacing: -0.3px;
+  line-height: 1.2;
+}
+
+.brand-tagline {
+  font-size: 13px;
+  color: #71717A;
+  line-height: 1.7;
+}
+
+/* 右侧表单面板 */
+.form-panel {
+  flex: 1;
+  background: #FFFFFF;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 40px;
+  overflow-y: auto;
 }
 
-h1 {
-  margin: 0;
-  font-size: 28px;
+.form-inner {
+  width: 100%;
+  max-width: 360px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
 }
 
-.subtitle {
-  margin: 0;
-  color: #64748b;
-}
-
-.error {
-  color: #b91c1c;
-  margin-top: 4px;
+.form-error {
+  font-size: 13px;
+  color: #DC2626;
 }
 </style>

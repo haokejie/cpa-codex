@@ -16,148 +16,212 @@ defineEmits<{
 </script>
 
 <template>
-  <section class="card">
-    <header class="card-header">
-      <h2>服务器列表</h2>
-      <button class="primary" type="button" :disabled="loading" @click="$emit('new')">
-        登录新服务器
-      </button>
+  <div class="list-view">
+    <header class="view-header">
+      <h2 class="view-title">选择服务器</h2>
+      <p class="view-desc">选择已保存的服务器，或添加新服务器</p>
     </header>
-    <div v-if="accounts.length === 0" class="empty">暂无账号</div>
-    <ul v-else class="list">
-      <li v-for="account in accounts" :key="account.account_key" class="item">
-        <div class="info">
-          <div class="name">{{ account.server }}</div>
-          <div class="meta">服务器地址</div>
+
+    <div v-if="accounts.length === 0" class="empty-state">
+      暂无已保存的服务器
+    </div>
+
+    <ul v-else class="server-list">
+      <li
+        v-for="account in accounts"
+        :key="account.account_key"
+        class="server-item"
+        :class="{ 'is-loading': loading }"
+        @click="!loading && $emit('login', account)"
+      >
+        <div class="server-info">
+          <div class="server-url">{{ account.server }}</div>
+          <div class="server-meta">
+            <span class="tag" :class="account.has_password ? 'tag-saved' : 'tag-manual'">
+              {{ account.has_password ? "密码已记住" : "需手动输入" }}
+            </span>
+          </div>
         </div>
-        <div class="actions">
-          <span class="tag">{{ account.has_password ? "已记住" : "需输入密码" }}</span>
-          <button
-            class="ghost"
-            type="button"
-            :disabled="loading"
-            @click.stop="$emit('login', account)"
-          >
-            登录
-          </button>
-          <button
-            class="danger"
-            type="button"
-            :disabled="loading"
-            @click.stop="$emit('remove', account)"
-          >
-            删除
-          </button>
-        </div>
+        <button
+          class="btn-delete"
+          type="button"
+          :disabled="loading"
+          title="删除"
+          @click.stop="$emit('remove', account)"
+        >
+          <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+            <path d="M1.5 1.5l10 10M11.5 1.5l-10 10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+          </svg>
+        </button>
       </li>
     </ul>
-  </section>
+
+    <button class="btn-add" type="button" :disabled="loading" @click="$emit('new')">
+      <svg width="13" height="13" viewBox="0 0 13 13" fill="none">
+        <path d="M6.5 1v11M1 6.5h11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" />
+      </svg>
+      添加新服务器
+    </button>
+  </div>
 </template>
 
 <style scoped>
-.card {
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 14px;
-  padding: 20px 24px;
-  box-shadow: 0 10px 24px rgba(15, 23, 42, 0.06);
-}
-
-.card-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-h2 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
+.list-view {
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
 }
 
-.item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 12px 16px;
-}
-
-.info {
+.view-header {
   display: flex;
   flex-direction: column;
   gap: 4px;
 }
 
-.name {
+.view-title {
+  font-size: 18px;
   font-weight: 600;
-  color: #0f172a;
+  color: #18181B;
+  letter-spacing: -0.2px;
+  line-height: 1.3;
 }
 
-.meta {
-  color: #64748b;
+.view-desc {
   font-size: 13px;
+  color: #71717A;
 }
 
-.actions {
+.empty-state {
+  padding: 24px;
+  text-align: center;
+  color: #A1A1AA;
+  font-size: 13px;
+  border: 1px dashed #E4E4E7;
+  border-radius: 10px;
+}
+
+.server-list {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: 250px;
+  overflow-y: auto;
+}
+
+.server-item {
   display: flex;
   align-items: center;
-  gap: 8px;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 1px solid #E4E4E7;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.server-item:hover:not(.is-loading) {
+  background: #FAFAFA;
+  border-color: #D4D4D8;
+}
+
+.server-item.is-loading {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.server-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.server-url {
+  font-size: 13px;
+  font-weight: 500;
+  color: #18181B;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.server-meta {
+  display: flex;
+  align-items: center;
 }
 
 .tag {
-  background: #f1f5f9;
-  color: #475569;
-  padding: 4px 8px;
-  border-radius: 999px;
-  font-size: 12px;
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
 }
 
-.primary {
-  background: #0f172a;
-  color: #fff;
+.tag-saved {
+  background: #F0FDF4;
+  color: #16A34A;
+}
+
+.tag-manual {
+  background: #F4F4F5;
+  color: #71717A;
+}
+
+.btn-delete {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: transparent;
   border: none;
-  border-radius: 10px;
-  padding: 8px 14px;
+  border-radius: 5px;
+  color: #A1A1AA;
   cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
 }
 
-.ghost {
-  background: transparent;
-  color: #0f172a;
-  border: 1px solid #cbd5f5;
-  border-radius: 10px;
-  padding: 8px 14px;
-  cursor: pointer;
+.btn-delete:hover:not(:disabled) {
+  background: #FEF2F2;
+  color: #DC2626;
 }
 
-.danger {
-  background: transparent;
-  color: #b91c1c;
-  border: 1px solid #fecaca;
-  border-radius: 10px;
-  padding: 8px 14px;
-  cursor: pointer;
-}
-
-.primary:disabled,
-.ghost:disabled,
-.danger:disabled {
-  opacity: 0.6;
+.btn-delete:disabled {
+  opacity: 0.4;
   cursor: not-allowed;
 }
 
-.empty {
-  color: #94a3b8;
+.btn-add {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 36px;
+  padding: 0 14px;
+  background: transparent;
+  color: #52525B;
+  border: 1px dashed #D4D4D8;
+  border-radius: 7px;
+  font-size: 13px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.btn-add:hover:not(:disabled) {
+  background: #FAFAFA;
+  border-color: #A1A1AA;
+  color: #18181B;
+}
+
+.btn-add:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

@@ -82,9 +82,12 @@ cd src-tauri && cargo clippy
 
 ### IPC Commands（前端可 `invoke` 的命令）
 
-- `get_config` → 返回 `AppConfig { autostart_enabled, last_account_key }`
+- `get_config` → 返回 `AppConfig { autostart_enabled }`
 - `set_autostart_enabled(enabled: bool)` → 开关开机自启
-- `login({ username, password, server })` → 保存账号到 DB + 密码到钥匙串
+- `login({ password, server, remember_password? })` → 验证登录 + 保存账号到 DB + 加密密码存 SQLite
+- `login_with_saved_password(account_key)` → 用已保存密码自动登录
+- `has_saved_password(account_key)` → 查询是否有已保存密码
+- `get_last_account_key` → 从 DB `app_state` 表取上次登录账号
 - `list_accounts` → 返回账号列表
 - `delete_account(account_key)` → 删除账号及其密码
 
@@ -104,18 +107,28 @@ Tauri 2 使用 capabilities 系统，权限配置在 `src-tauri/capabilities/def
 
 ### 数据存储
 
-- **SQLite** (`app_data_dir/app.db`)：`accounts` 表，字段 `account_key / username / server / last_login_at`
-- **JSON 配置文件** (`app_data_dir/config.json`)：`autostart_enabled`、`last_account_key`
-- **系统钥匙串**：以 `com.zoujunkun.tauri-app`（app identifier）为 service，`account_key` 为 user 存储密码
+- **SQLite** (`app_data_dir/app.db`)：
+  - `accounts` 表：`account_key / username / server / last_login_at / remember_password / encrypted_password`
+  - `app_state` 表：key-value 存储，目前存 `last_account_key`
+- **JSON 配置文件** (`app_data_dir/config.json`)：仅含 `autostart_enabled`
+- **密码加密**：`crypto.rs` 用 AES-256-GCM 加密后存入 SQLite `encrypted_password` 列（非钥匙串）
 
 `app_data_dir` 实际路径（identifier: `com.zoujunkun.tauri-app`）：
 - macOS：`~/Library/Application Support/com.zoujunkun.tauri-app/`
 - Windows：`C:\Users\<user>\AppData\Roaming\com.zoujunkun.tauri-app\`
 - Linux：`~/.local/share/com.zoujunkun.tauri-app/`
 
+### Auth 状态机（前端 `useAuthStore`）
+
+前端认证流程由 `mode` 状态驱动，4 种模式：
+- `"prompt"` → 检测到上次登录账号，提示快速登录
+- `"list"` → 显示已有账号列表供选择
+- `"form"` → 无账号，显示新增账号表单
+- `"config"` → 已登录，显示配置页
+
 ### 关键约定
 
-- `account_key` 格式：`"{server}::{username}"`，作为 DB 主键和钥匙串 user 标识
+- `account_key` 即服务器 URL（`build_account_key(server)` 直接返回 server 字符串）
 - 新增 Tauri command 需在 `commands.rs` 定义，并在 `lib.rs` 的 `invoke_handler!` 中注册
 - 所有 Store 结构体均实现 `Clone`（通过 `Arc` / sqlx pool 内部共享）
 - 关闭窗口行为在 `lib.rs` 的 `on_window_event` 中拦截，改为 `hide()`

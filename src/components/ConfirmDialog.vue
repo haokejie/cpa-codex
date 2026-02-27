@@ -18,13 +18,17 @@ defineEmits<{
 <template>
   <div v-if="open" class="mask">
     <div class="dialog">
-      <h3>{{ title }}</h3>
-      <p class="message">{{ message }}</p>
-      <div class="actions">
-        <button class="ghost" :disabled="loading" @click="$emit('cancel')">
+      <div class="dialog-header">
+        <h3 class="dialog-title">{{ title }}</h3>
+      </div>
+      <div class="dialog-body">
+        <p class="dialog-message">{{ message }}</p>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn-ghost" :disabled="loading" @click="$emit('cancel')">
           取消
         </button>
-        <button class="danger" :disabled="loading" @click="$emit('confirm')">
+        <button class="btn-danger" :disabled="loading" @click="$emit('confirm')">
           {{ loading ? "处理中..." : "确认删除" }}
         </button>
       </div>
@@ -36,62 +40,97 @@ defineEmits<{
 .mask {
   position: fixed;
   inset: 0;
-  background: rgba(15, 23, 42, 0.35);
+  background: rgba(9, 9, 11, 0.45);
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 20;
+  z-index: 50;
+  backdrop-filter: blur(2px);
 }
 
 .dialog {
-  width: 360px;
-  background: #fff;
-  border-radius: 14px;
-  padding: 20px 22px;
-  box-shadow: 0 20px 40px rgba(15, 23, 42, 0.2);
+  width: 340px;
+  background: #FFFFFF;
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+}
+
+.dialog-header {
+  padding: 20px 20px 0;
+}
+
+.dialog-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #18181B;
+}
+
+.dialog-body {
+  padding: 8px 20px 16px;
+}
+
+.dialog-message {
+  font-size: 13px;
+  color: #71717A;
+  line-height: 1.6;
+}
+
+.dialog-footer {
   display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-h3 {
-  margin: 0;
-  font-size: 18px;
-}
-
-.message {
-  margin: 0;
-  color: #64748b;
-  font-size: 14px;
-}
-
-.actions {
-  display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 8px;
+  padding: 0 20px 20px;
 }
 
-.ghost {
+.btn-ghost {
+  height: 34px;
+  padding: 0 14px;
   background: transparent;
-  color: #0f172a;
-  border: 1px solid #cbd5f5;
-  border-radius: 10px;
-  padding: 8px 14px;
+  color: #52525B;
+  border: 1px solid #E4E4E7;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: inherit;
   cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
 }
 
-.danger {
-  background: #b91c1c;
-  color: #fff;
+.btn-ghost:hover:not(:disabled) {
+  background: #FAFAFA;
+  border-color: #D4D4D8;
+  color: #18181B;
+}
+
+.btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.btn-danger {
+  height: 34px;
+  padding: 0 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #DC2626;
+  color: #FFFFFF;
   border: none;
-  border-radius: 10px;
-  padding: 8px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
   cursor: pointer;
+  transition: background 150ms ease, opacity 150ms ease;
 }
 
-.ghost:disabled,
-.danger:disabled {
-  opacity: 0.6;
+.btn-danger:hover:not(:disabled) {
+  background: #B91C1C;
+}
+
+.btn-danger:disabled {
+  opacity: 0.5;
   cursor: not-allowed;
 }
 </style>
