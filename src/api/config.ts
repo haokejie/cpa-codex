@@ -1,12 +1,15 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { AppConfig, CommandResult } from "../types";
+import * as mock from "./mock";
+import { isTauri, getInvoke } from "./tauri";
 
 export async function getConfig(): Promise<AppConfig> {
-  return invoke("get_config");
+  if (!isTauri()) return mock.getConfig();
+  return (await getInvoke())("get_config");
 }
 
 export async function setAutostartEnabled(
   enabled: boolean
 ): Promise<CommandResult> {
-  return invoke("set_autostart_enabled", { enabled });
+  if (!isTauri()) return mock.setAutostartEnabled();
+  return (await getInvoke())("set_autostart_enabled", { enabled });
 }

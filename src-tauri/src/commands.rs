@@ -1,7 +1,9 @@
 use crate::state::AppState;
 use crate::auth;
 use crate::crypto;
+use crate::remote;
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::State;
 use tauri_plugin_autostart::ManagerExt;
 
@@ -138,4 +140,68 @@ pub async fn login_with_saved_password(
 
 fn build_account_key(server: &str) -> String {
     server.to_string()
+}
+
+async fn resolve_session(state: &AppState) -> Result<(String, String), String> {
+    let account_key = state
+        .db
+        .get_last_account_key()
+        .await?
+        .ok_or_else(|| "未登录".to_string())?;
+    let account = state
+        .db
+        .get_account(&account_key)
+        .await?
+        .ok_or_else(|| "账号不存在".to_string())?;
+    let encrypted = state
+        .db
+        .get_encrypted_password(&account_key)
+        .await?
+        .ok_or_else(|| "未保存密码，请重新登录".to_string())?;
+    let password = crypto::decrypt_password(&encrypted)?;
+    let server = auth::normalize_api_base(&account.server);
+    Ok((server, password))
+}
+
+#[tauri::command]
+pub async fn get_codex_configs(state: State<'_, AppState>) -> Result<Value, String> {
+    let (server, password) = resolve_session(&state).await?;
+    remote::get_codex_configs(&server, &password).await
+}
+
+#[tauri::command]
+pub async fn save_codex_configs(state: State<'_, AppState>, configs: Value) -> Result<CommandResult, String> {
+    let (server, password) = resolve_session(&state).await?;
+    remote::save_codex_configs(&server, &password, configs).await?;
+    Ok(CommandResult { ok: true })
+}
+
+#[tauri::command]
+pub async fn update_codex_config(state: State<'_, AppState>, index: usize, config: Value) -> Result<CommandResult, String> {
+    let (server, password) = resolve_session(&state).await?;
+    let payload = serde_json::json!({ "index": index, "config": config });
+    remote::update_codex_config(&server, &password, payload).await?;
+    Ok(CommandResult { ok: true })
+}
+
+#[tauri::command]
+pub async fn delete_codex_config(state: State<'_, AppState>, api_key: String) -> Result<CommandResult, String> {
+    let (server, password) = resolve_session(&state).await?;
+    remote::delete_codex_config(&server, &password, &api_key).await?;
+    Ok(CommandResult { ok: true })
+}
+
+#[tauri::command]
+pub async fn get_codex_quota(
+    api_key: String,
+    base_url: Option<String>,
+    headers: Option<Value>,
+) -> Result<Value, String> {
+    remote::get_codex_quota(&api_key, base_url.as_deref(), headers.as_ref()).await
+}
+
+#[tauri::command]
+pub async fn get_usage(state: State<'_, AppState>) -> Result<Value, String> {
+    let (server, password) = resolve_session(&state).await?;
+    remote::get_usage(&server, &password).await
 }

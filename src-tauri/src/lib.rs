@@ -4,6 +4,7 @@ mod commands;
 mod config;
 mod crypto;
 mod db;
+mod remote;
 mod state;
 mod tray;
 
@@ -27,7 +28,7 @@ pub fn run() {
                 let db = crate::db::Db::new(&app_handle).await?;
                 Ok::<AppState, String>(AppState { config, db })
             })
-            .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+            .map_err(std::io::Error::other)?;
 
             app.manage(state.clone());
             crate::tray::setup_tray(&app_handle)?;
@@ -48,7 +49,13 @@ pub fn run() {
             commands::delete_account,
             commands::has_saved_password,
             commands::login_with_saved_password,
-            commands::get_last_account_key
+            commands::get_last_account_key,
+            commands::get_codex_configs,
+            commands::save_codex_configs,
+            commands::update_codex_config,
+            commands::delete_codex_config,
+            commands::get_codex_quota,
+            commands::get_usage
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

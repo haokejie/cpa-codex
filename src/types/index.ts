@@ -12,6 +12,58 @@ export type Account = {
   has_password: boolean;
 };
 
+// Codex 账号配置（与 ProviderKeyConfig 对应）
+export type CodexModelAlias = {
+  name: string;
+  alias?: string;
+  priority?: number;
+};
+
+export type CodexCloakConfig = {
+  mode?: string;
+  strictMode?: boolean;
+  sensitiveWords?: string[];
+};
+
+export type CodexConfig = {
+  apiKey: string;
+  priority: number;
+  planType?: 'plus' | 'team' | 'free';
+  prefix?: string;
+  baseUrl?: string;
+  websockets?: boolean;
+  proxyUrl?: string;
+  headers?: Record<string, string>;
+  models?: CodexModelAlias[];
+  excludedModels?: string[];
+  cloak?: CodexCloakConfig;
+};
+
+// Codex 额度窗口
+export type CodexQuotaWindow = {
+  label: string;
+  usedPercent: number;
+  limitWindowSeconds: number;
+  resetAfterSeconds: number;
+};
+
+// Codex 额度状态
+export type CodexQuotaState = {
+  status: 'idle' | 'loading' | 'success' | 'error';
+  allowed: boolean;
+  limitReached: boolean;
+  windows: CodexQuotaWindow[];
+  planType?: string;
+  error?: string;
+};
+
+// 使用统计
+export type UsageStats = {
+  totalRequests: number;
+  successCount: number;
+  failCount: number;
+};
+
 // 通用命令返回值
 export type CommandResult = { ok: boolean };
 

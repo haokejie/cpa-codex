@@ -1,30 +1,37 @@
-import { invoke } from "@tauri-apps/api/core";
 import type { Account, CommandResult, LoginPayload } from "../types";
+import * as mock from "./mock";
+import { isTauri, getInvoke } from "./tauri";
 
 export async function login(payload: LoginPayload): Promise<CommandResult> {
-  return invoke("login", { payload });
+  if (!isTauri()) return mock.login();
+  return (await getInvoke())("login", { payload });
 }
 
 export async function loginWithSavedPassword(
   accountKey: string
 ): Promise<CommandResult> {
-  return invoke("login_with_saved_password", { accountKey });
+  if (!isTauri()) return mock.loginWithSavedPassword();
+  return (await getInvoke())("login_with_saved_password", { accountKey });
 }
 
 export async function hasSavedPassword(accountKey: string): Promise<boolean> {
-  return invoke("has_saved_password", { accountKey });
+  if (!isTauri()) return mock.hasSavedPassword();
+  return (await getInvoke())("has_saved_password", { accountKey });
 }
 
 export async function listAccounts(): Promise<Account[]> {
-  return invoke("list_accounts");
+  if (!isTauri()) return mock.listAccounts();
+  return (await getInvoke())("list_accounts");
 }
 
 export async function getLastAccountKey(): Promise<string | null> {
-  return invoke("get_last_account_key");
+  if (!isTauri()) return mock.getLastAccountKey();
+  return (await getInvoke())("get_last_account_key");
 }
 
 export async function deleteAccount(
   accountKey: string
 ): Promise<CommandResult> {
-  return invoke("delete_account", { accountKey });
+  if (!isTauri()) return mock.deleteAccount();
+  return (await getInvoke())("delete_account", { accountKey });
 }

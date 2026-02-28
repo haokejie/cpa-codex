@@ -2,11 +2,19 @@
 import { onMounted, computed } from "vue";
 import { useConfigStore } from "../stores/config";
 import { useAuthStore } from "../stores/auth";
+import { useCodexStore } from "../stores/codex";
+import CodexAccountCard from "./CodexAccountCard.vue";
+import UsageStatsCard from "./UsageStatsCard.vue";
 
 const configStore = useConfigStore();
 const authStore = useAuthStore();
+const codexStore = useCodexStore();
 
-onMounted(configStore.refresh);
+onMounted(() => {
+  configStore.refresh();
+  codexStore.fetchConfigs();
+  codexStore.refreshQuotas();
+});
 
 const accountLabel = computed(() => {
   const account = authStore.currentAccount;
@@ -73,6 +81,10 @@ const accountLabel = computed(() => {
           </button>
         </div>
       </section>
+
+      <CodexAccountCard />
+
+      <UsageStatsCard />
 
       <p v-if="configStore.error" class="error-msg">{{ configStore.error }}</p>
     </main>

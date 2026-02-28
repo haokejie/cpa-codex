@@ -4,17 +4,9 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
 pub struct AppConfig {
     pub autostart_enabled: bool,
-}
-
-impl Default for AppConfig {
-    fn default() -> Self {
-        Self {
-            autostart_enabled: false,
-        }
-    }
 }
 
 #[derive(Clone)]
