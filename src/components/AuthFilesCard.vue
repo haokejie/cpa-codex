@@ -14,10 +14,20 @@ const cleaning = ref(false);
 const showDeleteDialog = ref(false);
 const pendingDeleteName = ref('');
 
-const totalPages = computed(() => Math.ceil(store.files.length / pageSize.value));
-const pagedFiles = computed(() => store.files.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value));
+function isCodexFile(f: { type?: string; provider?: string }) {
+  return f.type === 'codex' || f.provider === 'codex';
+}
 
-watch(() => store.files.length, () => {
+const filteredFiles = computed(() => {
+  return (store.files ?? []).filter(isCodexFile);
+});
+
+const totalPages = computed(() => Math.ceil(filteredFiles.value.length / pageSize.value));
+const pagedFiles = computed(() =>
+  filteredFiles.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value),
+);
+
+watch(() => filteredFiles.value.length, () => {
   if (currentPage.value > totalPages.value && totalPages.value > 0) currentPage.value = totalPages.value;
   if (totalPages.value === 0) currentPage.value = 1;
 });
@@ -77,7 +87,7 @@ function formatTime(v?: string | number) {
 }
 
 const cleanTargets = computed(() => {
-  return store.files.filter((f: AuthFileItem) => {
+  return filteredFiles.value.filter((f: AuthFileItem) => {
     const s = statusKind(f);
     return s === 'expired' || s === 'error';
   });
@@ -106,7 +116,7 @@ async function confirmClean() {
   }
   cleaning.value = true;
   try {
-    await store.removeBatch(cleanTargets.value.map((f) => f.name));
+    await store.removeBatch(cleanTargets.value.map((f: AuthFileItem) => f.name));
   } finally {
     cleaning.value = false;
     showCleanDialog.value = false;
@@ -136,7 +146,7 @@ async function confirmDelete() {
       <div class="head-row">
         <div>
           <h2 class="card-title">认证文件</h2>
-          <p class="card-desc">管理 OAuth 认证文件（{{ store.files.length }} 个）</p>
+          <p class="card-desc">管理 Codex 认证文件（{{ filteredFiles.length }} 个）</p>
         </div>
         <div class="head-actions">
           <button class="btn-ghost btn-sm" @click="store.fetchFiles" :disabled="store.loading">刷新</button>
@@ -155,10 +165,10 @@ async function confirmDelete() {
       <p class="empty-text">加载中...</p>
     </div>
 
-    <div v-else-if="!store.files.length && !store.error" class="empty-state">
+    <div v-else-if="!filteredFiles.length && !store.error" class="empty-state">
       <svg class="empty-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/></svg>
-      <p class="empty-text">暂无认证文件</p>
+      <p class="empty-text">暂无 Codex 认证文件</p>
     </div>
 
     <div v-else class="file-list">
@@ -195,8 +205,8 @@ async function confirmDelete() {
       </div>
     </div>
 
-    <div v-if="store.files.length" class="pagination">
-      <span class="page-info">共 {{ store.files.length }} 条，每页
+    <div v-if="filteredFiles.length" class="pagination">
+      <span class="page-info">共 {{ filteredFiles.length }} 条，每页
         <select class="page-size-select" v-model="pageSize">
           <option :value="5">5</option>
           <option :value="10">10</option>

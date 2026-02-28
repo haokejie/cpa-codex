@@ -18,10 +18,9 @@ onMounted(() => {
 });
 
 type TabKey = 'codex' | 'auth' | 'usage' | 'settings';
-const activeTab = ref<TabKey>('codex');
+const activeTab = ref<TabKey>('auth');
 
 const mainTabs: { key: TabKey; label: string }[] = [
-  { key: 'codex', label: '账号' },
   { key: 'auth', label: '认证' },
   { key: 'usage', label: '统计' },
 ];
