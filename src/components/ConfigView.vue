@@ -1,11 +1,12 @@
 <script setup lang="ts">
-import { onMounted, computed } from "vue";
+import { onMounted, computed, ref } from "vue";
 import { useConfigStore } from "../stores/config";
 import { useAuthStore } from "../stores/auth";
 import { useCodexStore } from "../stores/codex";
 import CodexAccountCard from "./CodexAccountCard.vue";
 import UsageStatsCard from "./UsageStatsCard.vue";
 import AuthFilesCard from "./AuthFilesCard.vue";
+import IconSettings from "./icons/IconSettings.vue";
 
 const configStore = useConfigStore();
 const authStore = useAuthStore();
@@ -16,6 +17,8 @@ onMounted(() => {
   codexStore.fetchConfigs();
   codexStore.refreshQuotas();
 });
+
+const view = ref<'main' | 'settings'>('main');
 
 const accountLabel = computed(() => {
   const account = authStore.currentAccount;
@@ -49,47 +52,60 @@ const accountLabel = computed(() => {
         </div>
         <div class="topbar-actions">
           <button class="btn-topbar" @click="authStore.switchAccount">切换服务器</button>
+          <button class="btn-topbar-icon" @click="view = 'settings'" title="设置">
+            <IconSettings />
+          </button>
           <button class="btn-topbar btn-topbar-danger" @click="authStore.logout">退出登录</button>
         </div>
       </div>
     </header>
 
-    <!-- 内容区 -->
-    <main class="config-content">
-      <section class="card">
-        <div class="card-head">
-          <h2 class="card-title">启动设置</h2>
-          <p class="card-desc">控制应用是否在系统启动时自动运行</p>
-        </div>
-        <div class="setting-row">
-          <div class="setting-info">
-            <div class="setting-name">开机自启动</div>
-            <div class="setting-value">
-              当前：
-              <span v-if="configStore.config" :class="configStore.config.autostart_enabled ? 'status-on' : 'status-off'">
-                {{ configStore.config.autostart_enabled ? "已开启" : "已关闭" }}
-              </span>
-              <span v-else class="status-muted">加载中...</span>
-            </div>
+    <!-- 设置面板 -->
+    <template v-if="view === 'settings'">
+      <header class="topbar topbar-settings">
+        <button class="btn-topbar" @click="view = 'main'">← 返回</button>
+        <span class="topbar-settings-title">设置</span>
+      </header>
+      <main class="config-content">
+        <div class="config-inner">
+        <section class="card">
+          <div class="card-head">
+            <h2 class="card-title">启动设置</h2>
+            <p class="card-desc">控制应用是否在系统启动时自动运行</p>
           </div>
-          <button
-            class="btn-action"
-            :class="{ 'btn-action-on': configStore.config?.autostart_enabled }"
-            :disabled="configStore.working || !configStore.config"
-            @click="configStore.toggleAutostart"
-          >
-            {{ configStore.config?.autostart_enabled ? "关闭自启动" : "开启自启动" }}
-          </button>
+          <div class="setting-row">
+            <div class="setting-info">
+              <div class="setting-name">开机自启动</div>
+              <div class="setting-value">
+                当前：
+                <span v-if="configStore.config" :class="configStore.config.autostart_enabled ? 'status-on' : 'status-off'">
+                  {{ configStore.config.autostart_enabled ? "已开启" : "已关闭" }}
+                </span>
+                <span v-else class="status-muted">加载中...</span>
+              </div>
+            </div>
+            <button
+              class="btn-action"
+              :class="{ 'btn-action-on': configStore.config?.autostart_enabled }"
+              :disabled="configStore.working || !configStore.config"
+              @click="configStore.toggleAutostart"
+            >
+              {{ configStore.config?.autostart_enabled ? "关闭自启动" : "开启自启动" }}
+            </button>
+          </div>
+        </section>
+        <p v-if="configStore.error" class="error-msg">{{ configStore.error }}</p>
         </div>
-      </section>
+      </main>
+    </template>
 
-      <CodexAccountCard />
-
-      <AuthFilesCard />
-
-      <UsageStatsCard />
-
-      <p v-if="configStore.error" class="error-msg">{{ configStore.error }}</p>
+    <!-- 主内容区 -->
+    <main v-else class="config-content">
+      <div class="config-inner">
+        <CodexAccountCard />
+        <AuthFilesCard />
+        <UsageStatsCard />
+      </div>
     </main>
   </div>
 </template>
@@ -209,14 +225,46 @@ const accountLabel = computed(() => {
   color: #DC2626;
 }
 
+.btn-topbar-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid #E4E4E7;
+  border-radius: 6px;
+  color: #52525B;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+
+.btn-topbar-icon:hover {
+  background: #FAFAFA;
+}
+
+.topbar-settings {
+  gap: 10px;
+  justify-content: flex-start;
+}
+
+.topbar-settings-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #18181B;
+}
+
 /* 内容区 */
 .config-content {
   flex: 1;
-  padding: 28px 32px;
   overflow-y: auto;
+}
+
+.config-inner {
   max-width: 640px;
   width: 100%;
   margin: 0 auto;
+  padding: 28px 32px;
 }
 
 .card {
