@@ -138,6 +138,24 @@ pub async fn login_with_saved_password(
     Ok(CommandResult { ok: true })
 }
 
+#[tauri::command]
+pub async fn set_tray_enabled(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<CommandResult, String> {
+    state.config.set_tray_enabled(enabled)?;
+    Ok(CommandResult { ok: true })
+}
+
+#[tauri::command]
+pub async fn set_close_to_tray(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<CommandResult, String> {
+    state.config.set_close_to_tray(enabled)?;
+    Ok(CommandResult { ok: true })
+}
+
 fn build_account_key(server: &str) -> String {
     server.to_string()
 }

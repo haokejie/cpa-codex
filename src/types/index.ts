@@ -1,6 +1,8 @@
 // 与 src-tauri/src/config.rs AppConfig 对应
 export type AppConfig = {
   autostart_enabled: boolean;
+  tray_enabled: boolean;
+  close_to_tray: boolean;
 };
 
 // 与 src-tauri/src/db.rs Account 对应

@@ -14,9 +14,25 @@ function getQuota(key: string): CodexQuotaState | undefined {
   return store.quotas[key];
 }
 
+function isInvalidAuth(q?: CodexQuotaState) {
+  const err = q?.error;
+  if (!err) return false;
+  const raw = String(err);
+  const lower = raw.toLowerCase();
+  return (
+    lower.includes("token_invalidated") ||
+    lower.includes("invalidated") ||
+    lower.includes("status\": 401") ||
+    lower.includes("http 401") ||
+    lower.includes("401") ||
+    raw.includes("认证失败")
+  );
+}
+
 function statusClass(cfg: CodexConfig) {
   const q = getQuota(cfg.apiKey);
   if (!q || q.status === "loading") return "loading";
+  if (isInvalidAuth(q)) return "invalid";
   if (q.status === "error" || !q.allowed) return "unavailable";
   if (q.limitReached) return "exhausted";
   return "available";
@@ -26,6 +42,7 @@ function statusLabel(cfg: CodexConfig) {
   const s = statusClass(cfg);
   if (s === "available") return "可用";
   if (s === "exhausted") return "已耗尽";
+  if (s === "invalid") return "失效";
   if (s === "unavailable") return "不可用";
   return "查询中...";
 }
@@ -185,7 +202,6 @@ function isQuotaLoading(key: string) {
   border: 1px solid var(--zinc-200);
   border-radius: 12px;
   padding: 20px 24px;
-  margin-bottom: 16px;
 }
 
 .card-head {
@@ -202,14 +218,14 @@ function isQuotaLoading(key: string) {
 }
 
 .card-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--zinc-900);
 }
 
 .card-count {
   font-size: 12px;
-  color: var(--zinc-400);
+  color: var(--zinc-500);
 }
 
 .card-head-actions {
@@ -310,7 +326,7 @@ function isQuotaLoading(key: string) {
 }
 .empty-text {
   font-size: 14px;
-  color: var(--zinc-400);
+  color: var(--zinc-500);
 }
 
 /* 全选栏 */
@@ -338,6 +354,7 @@ function isQuotaLoading(key: string) {
 }
 .badge-available { background: var(--green-50); color: var(--green-600); }
 .badge-exhausted { background: var(--red-50); color: var(--red-600); }
+.badge-invalid { background: var(--zinc-100); color: var(--zinc-400); }
 .badge-unavailable { background: var(--zinc-100); color: var(--zinc-400); }
 .badge-loading { background: var(--zinc-100); color: var(--zinc-400); }
 
@@ -411,6 +428,7 @@ function isQuotaLoading(key: string) {
 }
 .dot-available { background: var(--green-600); }
 .dot-exhausted { background: var(--red-600); }
+.dot-invalid { background: var(--zinc-300); }
 .dot-unavailable { background: var(--zinc-300); }
 .dot-loading {
   background: var(--zinc-400);
@@ -518,6 +536,7 @@ function isQuotaLoading(key: string) {
 .status-label {
   font-size: 12px;
 }
+.label-invalid { color: var(--zinc-400); }
 .label-unavailable { color: var(--zinc-400); }
 .label-exhausted { color: var(--red-600); }
 .label-loading { color: var(--zinc-400); }

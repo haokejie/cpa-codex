@@ -41,18 +41,17 @@ function fmt(n: number) {
   border: 1px solid var(--zinc-200);
   border-radius: 12px;
   padding: 20px 24px;
-  margin-bottom: 16px;
 }
 .card-head { margin-bottom: 20px; }
 .card-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--zinc-900);
   margin-bottom: 4px;
 }
 .card-desc {
   font-size: 12px;
-  color: var(--zinc-400);
+  color: var(--zinc-500);
 }
 .stats-grid {
   display: grid;
@@ -68,7 +67,7 @@ function fmt(n: number) {
 }
 .stat-label {
   font-size: 12px;
-  color: var(--zinc-400);
+  color: var(--zinc-500);
 }
 .stat-value {
   font-size: 18px;

@@ -31,19 +31,30 @@ pub fn run() {
             .map_err(std::io::Error::other)?;
 
             app.manage(state.clone());
-            crate::tray::setup_tray(&app_handle)?;
+            if state.config.get().tray_enabled {
+                crate::tray::setup_tray(&app_handle)?;
+            }
             crate::background::start_background_worker(app_handle);
             Ok(())
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = window.hide();
+                let close_to_tray = window
+                    .app_handle()
+                    .try_state::<AppState>()
+                    .map(|s| s.config.get().close_to_tray)
+                    .unwrap_or(true);
+                if close_to_tray {
+                    api.prevent_close();
+                    let _ = window.hide();
+                }
             }
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
             commands::set_autostart_enabled,
+            commands::set_tray_enabled,
+            commands::set_close_to_tray,
             commands::login,
             commands::list_accounts,
             commands::delete_account,

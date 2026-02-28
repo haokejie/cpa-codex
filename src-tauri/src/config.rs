@@ -4,9 +4,27 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use tauri::Manager;
 
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+fn default_true() -> bool {
+    true
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub autostart_enabled: bool,
+    #[serde(default = "default_true")]
+    pub tray_enabled: bool,
+    #[serde(default = "default_true")]
+    pub close_to_tray: bool,
+}
+
+impl Default for AppConfig {
+    fn default() -> Self {
+        Self {
+            autostart_enabled: false,
+            tray_enabled: true,
+            close_to_tray: true,
+        }
+    }
 }
 
 #[derive(Clone)]
@@ -50,6 +68,20 @@ impl ConfigStore {
     pub fn set_autostart_enabled(&self, enabled: bool) -> Result<(), String> {
         let mut data = self.data.lock().unwrap_or_else(|e| e.into_inner());
         data.autostart_enabled = enabled;
+        drop(data);
+        self.persist()
+    }
+
+    pub fn set_tray_enabled(&self, enabled: bool) -> Result<(), String> {
+        let mut data = self.data.lock().unwrap_or_else(|e| e.into_inner());
+        data.tray_enabled = enabled;
+        drop(data);
+        self.persist()
+    }
+
+    pub fn set_close_to_tray(&self, enabled: bool) -> Result<(), String> {
+        let mut data = self.data.lock().unwrap_or_else(|e| e.into_inner());
+        data.close_to_tray = enabled;
         drop(data);
         self.persist()
     }

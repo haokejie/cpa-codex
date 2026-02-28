@@ -17,6 +17,14 @@ pub struct AuthFileRow {
     pub size: Option<i64>,
     #[serde(default)]
     pub disabled: Option<bool>,
+    #[serde(default)]
+    pub unavailable: Option<bool>,
+    #[serde(default)]
+    pub status: Option<String>,
+    #[serde(default)]
+    pub status_message: Option<String>,
+    #[serde(default)]
+    pub last_refresh: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -246,7 +254,7 @@ impl Db {
             .execute(&mut *tx).await.map_err(|e| format!("清空认证文件表失败: {e}"))?;
         for f in files {
             sqlx::query(
-                "INSERT INTO auth_files (account_key, name, type, provider, size, disabled) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                "INSERT INTO auth_files (account_key, name, type, provider, size, disabled, unavailable, status, status_message, last_refresh) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             )
             .bind(account_key)
             .bind(&f.name)
@@ -254,6 +262,10 @@ impl Db {
             .bind(&f.provider)
             .bind(f.size)
             .bind(if f.disabled.unwrap_or(false) { 1 } else { 0 })
+            .bind(if f.unavailable.unwrap_or(false) { 1 } else { 0 })
+            .bind(&f.status)
+            .bind(&f.status_message)
+            .bind(&f.last_refresh)
             .execute(&mut *tx).await.map_err(|e| format!("写入认证文件失败: {e}"))?;
         }
         tx.commit().await.map_err(|e| format!("提交事务失败: {e}"))?;
@@ -261,7 +273,7 @@ impl Db {
     }
 
     pub async fn list_auth_files(&self, account_key: &str) -> Result<Vec<AuthFileRow>, String> {
-        let rows = sqlx::query("SELECT name, type, provider, size, disabled FROM auth_files WHERE account_key = ?1 ORDER BY name")
+        let rows = sqlx::query("SELECT name, type, provider, size, disabled, unavailable, status, status_message, last_refresh FROM auth_files WHERE account_key = ?1 ORDER BY name")
             .bind(account_key)
             .fetch_all(&self.pool).await.map_err(|e| format!("读取认证文件失败: {e}"))?;
         Ok(rows.iter().map(|r| AuthFileRow {
@@ -270,6 +282,10 @@ impl Db {
             provider: r.try_get("provider").ok(),
             size: r.try_get("size").ok(),
             disabled: Some(r.try_get::<i32, _>("disabled").unwrap_or(0) != 0),
+            unavailable: Some(r.try_get::<i32, _>("unavailable").unwrap_or(0) != 0),
+            status: r.try_get("status").ok(),
+            status_message: r.try_get("status_message").ok(),
+            last_refresh: r.try_get("last_refresh").ok(),
         }).collect())
     }
 }
@@ -351,12 +367,32 @@ async fn ensure_schema(pool: &SqlitePool) -> Result<(), String> {
             provider TEXT,
             size INTEGER,
             disabled INTEGER NOT NULL DEFAULT 0,
+            unavailable INTEGER NOT NULL DEFAULT 0,
+            status TEXT,
+            status_message TEXT,
+            last_refresh TEXT,
             PRIMARY KEY (account_key, name)
         )",
     )
     .execute(pool)
     .await
     .map_err(|e| format!("初始化认证文件表失败: {e}"))?;
+
+    // 迁移：auth_files 表新增状态列
+    let af_cols = sqlx::query("PRAGMA table_info(auth_files)")
+        .fetch_all(pool).await.unwrap_or_default();
+    let af_col_names: Vec<String> = af_cols.iter().map(|r| r.try_get("name").unwrap_or_default()).collect();
+    for (col, def) in [
+        ("unavailable", "INTEGER NOT NULL DEFAULT 0"),
+        ("status", "TEXT"),
+        ("status_message", "TEXT"),
+        ("last_refresh", "TEXT"),
+    ] {
+        if !af_col_names.contains(&col.to_string()) {
+            let sql = format!("ALTER TABLE auth_files ADD COLUMN {col} {def}");
+            let _ = sqlx::query(&sql).execute(pool).await;
+        }
+    }
 
     Ok(())
 }

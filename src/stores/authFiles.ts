@@ -32,10 +32,27 @@ export const useAuthFilesStore = defineStore("authFiles", () => {
     files.value = files.value.filter((f) => f.name !== name);
   }
 
+  async function removeBatch(names: string[]) {
+    const unique = Array.from(new Set(names)).filter(Boolean);
+    if (unique.length === 0) return { deleted: [], failed: [] };
+    const results = await Promise.allSettled(unique.map((name) => deleteAuthFile(name)));
+    const deleted: string[] = [];
+    const failed: string[] = [];
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") deleted.push(unique[index]);
+      else failed.push(unique[index]);
+    });
+    if (deleted.length > 0) {
+      const deletedSet = new Set(deleted);
+      files.value = files.value.filter((f) => !deletedSet.has(f.name));
+    }
+    return { deleted, failed };
+  }
+
   async function removeAll() {
     await deleteAllAuthFiles();
     files.value = [];
   }
 
-  return { files, loading, error, fetchFiles, toggleDisabled, remove, removeAll };
+  return { files, loading, error, fetchFiles, toggleDisabled, remove, removeBatch, removeAll };
 });

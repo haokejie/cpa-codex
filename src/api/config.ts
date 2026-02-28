@@ -13,3 +13,17 @@ export async function setAutostartEnabled(
   if (!isTauri()) return mock.setAutostartEnabled();
   return (await getInvoke())("set_autostart_enabled", { enabled });
 }
+
+export async function setTrayEnabled(
+  enabled: boolean
+): Promise<CommandResult> {
+  if (!isTauri()) return mock.setTrayEnabled();
+  return (await getInvoke())("set_tray_enabled", { enabled });
+}
+
+export async function setCloseToTray(
+  enabled: boolean
+): Promise<CommandResult> {
+  if (!isTauri()) return mock.setCloseToTray();
+  return (await getInvoke())("set_close_to_tray", { enabled });
+}

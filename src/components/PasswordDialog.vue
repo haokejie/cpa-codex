@@ -218,7 +218,7 @@ watch(
   background: transparent;
   color: #52525B;
   border: 1px solid #E4E4E7;
-  border-radius: 6px;
+  border-radius: 7px;
   font-size: 13px;
   font-family: inherit;
   cursor: pointer;
@@ -245,7 +245,7 @@ watch(
   background: #18181B;
   color: #FFFFFF;
   border: none;
-  border-radius: 6px;
+  border-radius: 7px;
   font-size: 13px;
   font-weight: 500;
   font-family: inherit;

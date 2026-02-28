@@ -6,7 +6,6 @@ import { useCodexStore } from "../stores/codex";
 import CodexAccountCard from "./CodexAccountCard.vue";
 import UsageStatsCard from "./UsageStatsCard.vue";
 import AuthFilesCard from "./AuthFilesCard.vue";
-import IconSettings from "./icons/IconSettings.vue";
 
 const configStore = useConfigStore();
 const authStore = useAuthStore();
@@ -18,7 +17,14 @@ onMounted(() => {
   codexStore.refreshQuotas();
 });
 
-const view = ref<'main' | 'settings'>('main');
+type TabKey = 'codex' | 'auth' | 'usage' | 'settings';
+const activeTab = ref<TabKey>('codex');
+
+const mainTabs: { key: TabKey; label: string }[] = [
+  { key: 'codex', label: '账号' },
+  { key: 'auth', label: '认证' },
+  { key: 'usage', label: '统计' },
+];
 
 const accountLabel = computed(() => {
   const account = authStore.currentAccount;
@@ -52,61 +58,140 @@ const accountLabel = computed(() => {
         </div>
         <div class="topbar-actions">
           <button class="btn-topbar" @click="authStore.switchAccount">切换服务器</button>
-          <button class="btn-topbar-icon" @click="view = 'settings'" title="设置">
-            <IconSettings />
-          </button>
           <button class="btn-topbar btn-topbar-danger" @click="authStore.logout">退出登录</button>
         </div>
       </div>
     </header>
 
-    <!-- 设置面板 -->
-    <template v-if="view === 'settings'">
-      <header class="topbar topbar-settings">
-        <button class="btn-topbar" @click="view = 'main'">← 返回</button>
-        <span class="topbar-settings-title">设置</span>
-      </header>
-      <main class="config-content">
-        <div class="config-inner">
-        <section class="card">
-          <div class="card-head">
-            <h2 class="card-title">启动设置</h2>
-            <p class="card-desc">控制应用是否在系统启动时自动运行</p>
-          </div>
-          <div class="setting-row">
-            <div class="setting-info">
-              <div class="setting-name">开机自启动</div>
-              <div class="setting-value">
-                当前：
-                <span v-if="configStore.config" :class="configStore.config.autostart_enabled ? 'status-on' : 'status-off'">
-                  {{ configStore.config.autostart_enabled ? "已开启" : "已关闭" }}
-                </span>
-                <span v-else class="status-muted">加载中...</span>
+    <!-- 主体：侧边导航 + 内容区 -->
+    <div class="body">
+      <nav class="sidebar">
+        <button
+          v-for="t in mainTabs"
+          :key="t.key"
+          class="nav-item"
+          :class="{ 'nav-active': activeTab === t.key }"
+          @click="activeTab = t.key"
+        >
+          <svg v-if="t.key === 'codex'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
+          </svg>
+          <svg v-else-if="t.key === 'auth'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+          </svg>
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+          <span class="nav-label">{{ t.label }}</span>
+        </button>
+        <button
+          class="nav-item nav-settings"
+          :class="{ 'nav-active': activeTab === 'settings' }"
+          @click="activeTab = 'settings'"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          <span class="nav-label">设置</span>
+        </button>
+      </nav>
+
+      <main class="content">
+        <div class="content-inner">
+          <!-- Codex 账号 -->
+          <CodexAccountCard v-if="activeTab === 'codex'" />
+
+          <!-- 认证文件 -->
+          <AuthFilesCard v-if="activeTab === 'auth'" />
+
+          <!-- 使用统计 -->
+          <UsageStatsCard v-if="activeTab === 'usage'" />
+
+          <!-- 设置 -->
+          <template v-if="activeTab === 'settings'">
+            <section class="card">
+              <div class="card-head">
+                <h2 class="card-title">启动设置</h2>
+                <p class="card-desc">控制应用是否在系统启动时自动运行</p>
               </div>
-            </div>
-            <button
-              class="btn-action"
-              :class="{ 'btn-action-on': configStore.config?.autostart_enabled }"
-              :disabled="configStore.working || !configStore.config"
-              @click="configStore.toggleAutostart"
-            >
-              {{ configStore.config?.autostart_enabled ? "关闭自启动" : "开启自启动" }}
-            </button>
-          </div>
-        </section>
-        <p v-if="configStore.error" class="error-msg">{{ configStore.error }}</p>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-name">开机自启动</div>
+                  <div class="setting-value">
+                    当前：
+                    <span v-if="configStore.config" :class="configStore.config.autostart_enabled ? 'status-on' : 'status-off'">
+                      {{ configStore.config.autostart_enabled ? "已开启" : "已关闭" }}
+                    </span>
+                    <span v-else class="status-muted">加载中...</span>
+                  </div>
+                </div>
+                <button
+                  class="btn-action"
+                  :class="{ 'btn-action-on': configStore.config?.autostart_enabled }"
+                  :disabled="configStore.working || !configStore.config"
+                  @click="configStore.toggleAutostart"
+                >
+                  {{ configStore.config?.autostart_enabled ? "关闭自启动" : "开启自启动" }}
+                </button>
+              </div>
+            </section>
+
+            <section class="card">
+              <div class="card-head">
+                <h2 class="card-title">托盘与后台运行</h2>
+                <p class="card-desc">控制系统托盘图标和关闭窗口时的行为</p>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-name">托盘图标</div>
+                  <div class="setting-value">
+                    当前：
+                    <span v-if="configStore.config" :class="configStore.config.tray_enabled ? 'status-on' : 'status-off'">
+                      {{ configStore.config.tray_enabled ? "已开启" : "已关闭" }}
+                    </span>
+                    <span v-else class="status-muted">加载中...</span>
+                  </div>
+                </div>
+                <button
+                  class="btn-action"
+                  :class="{ 'btn-action-on': configStore.config?.tray_enabled }"
+                  :disabled="configStore.working || !configStore.config"
+                  @click="configStore.toggleTray"
+                >
+                  {{ configStore.config?.tray_enabled ? "关闭托盘" : "开启托盘" }}
+                </button>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-name">关闭时最小化到托盘</div>
+                  <div class="setting-value">
+                    <template v-if="configStore.config?.tray_enabled">
+                      当前：
+                      <span :class="configStore.config.close_to_tray ? 'status-on' : 'status-off'">
+                        {{ configStore.config.close_to_tray ? "已开启" : "已关闭" }}
+                      </span>
+                    </template>
+                    <span v-else class="status-muted">需开启托盘图标</span>
+                  </div>
+                </div>
+                <button
+                  class="btn-action"
+                  :class="{ 'btn-action-on': configStore.config?.close_to_tray }"
+                  :disabled="configStore.working || !configStore.config || !configStore.config.tray_enabled"
+                  @click="configStore.toggleCloseToTray"
+                >
+                  {{ configStore.config?.close_to_tray ? "关闭" : "开启" }}
+                </button>
+              </div>
+            </section>
+
+            <p v-if="configStore.error" class="error-msg">{{ configStore.error }}</p>
+          </template>
         </div>
       </main>
-    </template>
-
-    <!-- 主内容区 -->
-    <main v-else class="config-content">
-      <div class="config-inner">
-        <CodexAccountCard />
-        <AuthFilesCard />
-        <UsageStatsCard />
-      </div>
-    </main>
+    </div>
   </div>
 </template>
 
@@ -115,7 +200,6 @@ const accountLabel = computed(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: #F4F4F5;
 }
 
 /* 顶部栏 */
@@ -225,54 +309,90 @@ const accountLabel = computed(() => {
   color: #DC2626;
 }
 
-.btn-topbar-icon {
-  width: 28px;
-  height: 28px;
+/* 主体 */
+.body {
   display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* 侧边导航 */
+.sidebar {
+  width: 60px;
+  background: #F4F4F5;
+  border-right: 1px solid #E4E4E7;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 8px 0;
+  flex-shrink: 0;
+}
+
+.nav-item {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 3px;
+  width: 48px;
+  height: 44px;
+  margin-bottom: 4px;
   background: transparent;
-  border: 1px solid #E4E4E7;
-  border-radius: 6px;
-  color: #52525B;
+  border: none;
+  border-radius: 8px;
+  color: #71717A;
   cursor: pointer;
-  transition: background 150ms ease;
+  transition: background 150ms ease, color 150ms ease;
+  font-family: inherit;
 }
 
-.btn-topbar-icon:hover {
-  background: #FAFAFA;
+.nav-item:hover {
+  background: #E4E4E7;
+  color: #27272A;
 }
 
-.topbar-settings {
-  gap: 10px;
-  justify-content: flex-start;
-}
-
-.topbar-settings-title {
-  font-size: 14px;
-  font-weight: 600;
+.nav-active {
+  background: #E4E4E7;
   color: #18181B;
 }
 
-/* 内容区 */
-.config-content {
-  flex: 1;
-  overflow-y: auto;
+.nav-active:hover {
+  background: #D4D4D8;
 }
 
-.config-inner {
-  max-width: 640px;
+.nav-settings {
+  margin-top: auto;
+}
+
+.nav-label {
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+}
+
+/* 内容区 */
+.content {
+  flex: 1;
+  overflow-y: auto;
+  background: #F4F4F5;
+}
+
+.content-inner {
+  max-width: 760px;
   width: 100%;
   margin: 0 auto;
   padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
 }
 
+/* 设置卡片 */
 .card {
   background: #FFFFFF;
   border: 1px solid #E4E4E7;
   border-radius: 12px;
   padding: 20px 24px;
-  margin-bottom: 16px;
 }
 
 .card-head {
@@ -280,7 +400,7 @@ const accountLabel = computed(() => {
 }
 
 .card-title {
-  font-size: 14px;
+  font-size: 15px;
   font-weight: 600;
   color: #18181B;
   margin-bottom: 4px;
@@ -288,7 +408,7 @@ const accountLabel = computed(() => {
 
 .card-desc {
   font-size: 12px;
-  color: #A1A1AA;
+  color: #71717A;
 }
 
 .setting-row {
@@ -317,18 +437,9 @@ const accountLabel = computed(() => {
   color: #71717A;
 }
 
-.status-on {
-  color: #16A34A;
-  font-weight: 500;
-}
-
-.status-off {
-  color: #A1A1AA;
-}
-
-.status-muted {
-  color: #A1A1AA;
-}
+.status-on { color: #16A34A; font-weight: 500; }
+.status-off { color: #A1A1AA; }
+.status-muted { color: #A1A1AA; }
 
 .btn-action {
   height: 32px;

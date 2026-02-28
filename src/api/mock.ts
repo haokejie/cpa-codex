@@ -35,10 +35,18 @@ export async function deleteAccount(): Promise<CommandResult> {
 
 // Config mocks
 export async function getConfig(): Promise<AppConfig> {
-  return { autostart_enabled: false };
+  return { autostart_enabled: false, tray_enabled: true, close_to_tray: true };
 }
 
 export async function setAutostartEnabled(): Promise<CommandResult> {
+  return { ok: true };
+}
+
+export async function setTrayEnabled(): Promise<CommandResult> {
+  return { ok: true };
+}
+
+export async function setCloseToTray(): Promise<CommandResult> {
   return { ok: true };
 }
 
@@ -87,4 +95,16 @@ export async function getCodexQuota(): Promise<Record<string, unknown>> {
 
 export async function getUsage(): Promise<Record<string, unknown>> {
   return { totalRequests: 128, successCount: 120, failCount: 8 };
+}
+
+// AuthFiles mocks
+import type { AuthFileItem } from "../types";
+export async function listAuthFiles(): Promise<AuthFileItem[]> {
+  return [
+    { name: "claude_oauth_token.json", type: "claude", disabled: false, statusMessage: "ok", lastRefresh: Date.now() / 1000 - 300 },
+    { name: "gemini_credentials.json", type: "gemini", disabled: false, unavailable: false, statusMessage: "healthy", lastRefresh: Date.now() / 1000 - 3600 },
+    { name: "openai_token.json", type: "openai", disabled: true, statusMessage: "disabled", lastRefresh: Date.now() / 1000 - 7200 },
+    { name: "codex_auth.json", type: "codex", disabled: false, unavailable: true, statusMessage: "token expired", lastRefresh: Date.now() / 1000 - 86400 },
+    { name: "runtime_session.json", type: "session", runtimeOnly: true, statusMessage: "ok", lastRefresh: Date.now() / 1000 - 60 },
+  ];
 }
