@@ -33,6 +33,7 @@ export const useCodexStore = defineStore("codex", () => {
   const quotas = ref<Record<string, CodexQuotaState>>({});
   const usage = ref<UsageStats>({ totalRequests: 0, successCount: 0, failCount: 0 });
   const loading = ref(false);
+  const fetchError = ref<string | null>(null);
   const refreshingQuota = ref(false);
   const selected = ref<Set<string>>(new Set());
 
@@ -45,6 +46,7 @@ export const useCodexStore = defineStore("codex", () => {
 
   async function fetchConfigs() {
     loading.value = true;
+    fetchError.value = null;
     try {
       configs.value = await getCodexConfigs();
       try {
@@ -55,6 +57,8 @@ export const useCodexStore = defineStore("codex", () => {
           failCount: Number(raw.failCount || 0),
         };
       } catch { /* usage 查询失败不阻塞 */ }
+    } catch (e) {
+      fetchError.value = String(e);
     } finally {
       loading.value = false;
     }
@@ -159,7 +163,7 @@ export const useCodexStore = defineStore("codex", () => {
   }
 
   return {
-    configs, quotas, usage, loading, refreshingQuota,
+    configs, quotas, usage, loading, fetchError, refreshingQuota,
     selected, selectedCount, allSelected, successRate,
     fetchConfigs, refreshQuotas, refreshSingleQuota,
     toggleSelect, toggleSelectAll, clearSelection,

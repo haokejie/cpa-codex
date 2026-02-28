@@ -179,7 +179,7 @@ pub async fn save_codex_configs(state: State<'_, AppState>, configs: Value) -> R
 #[tauri::command]
 pub async fn update_codex_config(state: State<'_, AppState>, index: usize, config: Value) -> Result<CommandResult, String> {
     let (server, password) = resolve_session(&state).await?;
-    let payload = serde_json::json!({ "index": index, "config": config });
+    let payload = serde_json::json!({ "index": index, "value": config });
     remote::update_codex_config(&server, &password, payload).await?;
     Ok(CommandResult { ok: true })
 }
@@ -204,4 +204,31 @@ pub async fn get_codex_quota(
 pub async fn get_usage(state: State<'_, AppState>) -> Result<Value, String> {
     let (server, password) = resolve_session(&state).await?;
     remote::get_usage(&server, &password).await
+}
+
+#[tauri::command]
+pub async fn list_auth_files(state: State<'_, AppState>) -> Result<Value, String> {
+    let (server, password) = resolve_session(&state).await?;
+    remote::list_auth_files(&server, &password).await
+}
+
+#[tauri::command]
+pub async fn set_auth_file_status(state: State<'_, AppState>, name: String, disabled: bool) -> Result<CommandResult, String> {
+    let (server, password) = resolve_session(&state).await?;
+    remote::set_auth_file_status(&server, &password, &name, disabled).await?;
+    Ok(CommandResult { ok: true })
+}
+
+#[tauri::command]
+pub async fn delete_auth_file(state: State<'_, AppState>, name: String) -> Result<CommandResult, String> {
+    let (server, password) = resolve_session(&state).await?;
+    remote::delete_auth_file(&server, &password, &name).await?;
+    Ok(CommandResult { ok: true })
+}
+
+#[tauri::command]
+pub async fn delete_all_auth_files(state: State<'_, AppState>) -> Result<CommandResult, String> {
+    let (server, password) = resolve_session(&state).await?;
+    remote::delete_all_auth_files(&server, &password).await?;
+    Ok(CommandResult { ok: true })
 }

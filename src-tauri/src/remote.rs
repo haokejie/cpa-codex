@@ -10,6 +10,40 @@ const DEFAULT_CODEX_BASE_URL: &str = "https://api.openai.com";
 const CODEX_USAGE_PATH: &str = "/dashboard/user/codex_usage";
 const REQUEST_TIMEOUT_SECS: u64 = 30;
 
+pub async fn list_auth_files(server: &str, password: &str) -> Result<Value, String> {
+    let url = build_url(server, "/auth-files");
+    let resp = client()?.get(&url).bearer_auth(password).send().await.map_err(map_error)?;
+    if !resp.status().is_success() { return Err(map_status(resp.status())); }
+    let body: Value = resp.json().await.map_err(|e| format!("解析响应失败: {e}"))?;
+    let files = body.get("files").and_then(|v| v.as_array()).cloned().unwrap_or_default();
+    Ok(Value::Array(files))
+}
+
+pub async fn set_auth_file_status(server: &str, password: &str, name: &str, disabled: bool) -> Result<(), String> {
+    let url = build_url(server, "/auth-files/status");
+    let resp = client()?.patch(&url).bearer_auth(password)
+        .json(&serde_json::json!({ "name": name, "disabled": disabled }))
+        .send().await.map_err(map_error)?;
+    if !resp.status().is_success() { return Err(map_status(resp.status())); }
+    Ok(())
+}
+
+pub async fn delete_auth_file(server: &str, password: &str, name: &str) -> Result<(), String> {
+    let url = build_url(server, "/auth-files");
+    let resp = client()?.delete(&url).bearer_auth(password)
+        .query(&[("name", name)])
+        .send().await.map_err(map_error)?;
+    if !resp.status().is_success() { return Err(map_status(resp.status())); }
+    Ok(())
+}
+
+pub async fn delete_all_auth_files(server: &str, password: &str) -> Result<(), String> {
+    let url = format!("{}?all=true", build_url(server, "/auth-files"));
+    let resp = client()?.delete(&url).bearer_auth(password).send().await.map_err(map_error)?;
+    if !resp.status().is_success() { return Err(map_status(resp.status())); }
+    Ok(())
+}
+
 fn build_url(server: &str, path: &str) -> String {
     let base = normalize_api_base(server);
     format!("{base}{MANAGEMENT_API_PREFIX}{path}")
@@ -41,6 +75,46 @@ fn map_status(status: StatusCode) -> String {
     }
 }
 
+// kebab-case → camelCase（读取时）
+fn normalize_config(item: &Value) -> Value {
+    let Some(obj) = item.as_object() else { return item.clone() };
+    let mut out = serde_json::Map::new();
+    let key_map: &[(&str, &str)] = &[
+        ("api-key", "apiKey"),
+        ("base-url", "baseUrl"),
+        ("proxy-url", "proxyUrl"),
+        ("excluded-models", "excludedModels"),
+        ("strict-mode", "strictMode"),
+        ("sensitive-words", "sensitiveWords"),
+    ];
+    for (k, v) in obj {
+        let new_key = key_map.iter().find(|(from, _)| from == k).map(|(_, to)| *to).unwrap_or(k.as_str());
+        let new_val = if k == "cloak" { normalize_config(v) } else { v.clone() };
+        out.insert(new_key.to_string(), new_val);
+    }
+    Value::Object(out)
+}
+
+// camelCase → kebab-case（写入时）
+fn serialize_config(item: &Value) -> Value {
+    let Some(obj) = item.as_object() else { return item.clone() };
+    let mut out = serde_json::Map::new();
+    let key_map: &[(&str, &str)] = &[
+        ("apiKey", "api-key"),
+        ("baseUrl", "base-url"),
+        ("proxyUrl", "proxy-url"),
+        ("excludedModels", "excluded-models"),
+        ("strictMode", "strict-mode"),
+        ("sensitiveWords", "sensitive-words"),
+    ];
+    for (k, v) in obj {
+        let new_key = key_map.iter().find(|(from, _)| from == k).map(|(_, to)| *to).unwrap_or(k.as_str());
+        let new_val = if k == "cloak" { serialize_config(v) } else { v.clone() };
+        out.insert(new_key.to_string(), new_val);
+    }
+    Value::Object(out)
+}
+
 pub async fn get_codex_configs(server: &str, password: &str) -> Result<Value, String> {
     let url = build_url(server, CODEX_API_KEY_PATH);
     let resp = client()?
@@ -52,15 +126,25 @@ pub async fn get_codex_configs(server: &str, password: &str) -> Result<Value, St
     if !resp.status().is_success() {
         return Err(map_status(resp.status()));
     }
-    resp.json::<Value>().await.map_err(|e| format!("解析响应失败: {e}"))
+    let body: Value = resp.json().await.map_err(|e| format!("解析响应失败: {e}"))?;
+    let arr = match &body {
+        Value::Array(_) => &body,
+        Value::Object(obj) => obj.get("codex-api-key").unwrap_or(&body),
+        _ => &body,
+    };
+    let items = arr.as_array().map(|a| a.iter().map(normalize_config).collect::<Vec<_>>());
+    Ok(items.map(Value::Array).unwrap_or(body))
 }
 
 pub async fn save_codex_configs(server: &str, password: &str, configs: Value) -> Result<(), String> {
     let url = build_url(server, CODEX_API_KEY_PATH);
+    let body = configs.as_array()
+        .map(|a| Value::Array(a.iter().map(serialize_config).collect()))
+        .unwrap_or(configs);
     let resp = client()?
         .put(&url)
         .bearer_auth(password)
-        .json(&configs)
+        .json(&body)
         .send()
         .await
         .map_err(map_error)?;
@@ -72,10 +156,19 @@ pub async fn save_codex_configs(server: &str, password: &str, configs: Value) ->
 
 pub async fn update_codex_config(server: &str, password: &str, payload: Value) -> Result<(), String> {
     let url = build_url(server, CODEX_API_KEY_PATH);
+    let body = if let Some(obj) = payload.as_object() {
+        let mut out = obj.clone();
+        if let Some(v) = out.remove("value") {
+            out.insert("value".to_string(), serialize_config(&v));
+        }
+        Value::Object(out)
+    } else {
+        payload
+    };
     let resp = client()?
         .patch(&url)
         .bearer_auth(password)
-        .json(&payload)
+        .json(&body)
         .send()
         .await
         .map_err(map_error)?;

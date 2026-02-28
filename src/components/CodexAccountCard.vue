@@ -84,8 +84,14 @@ function isQuotaLoading(key: string) {
       </div>
     </div>
 
+    <!-- 错误提示 -->
+    <div v-if="store.fetchError" class="error-banner">
+      <span class="error-text">{{ store.fetchError }}</span>
+      <button class="btn-ghost btn-sm" @click="store.fetchConfigs">重试</button>
+    </div>
+
     <!-- 空状态 -->
-    <div v-if="!store.configs.length && !store.loading" class="empty-state">
+    <div v-if="!store.configs.length && !store.loading && !store.fetchError" class="empty-state">
       <p class="empty-text">暂无 Codex 账号</p>
       <button class="btn-dashed">+ 添加账号</button>
     </div>
@@ -276,6 +282,22 @@ function isQuotaLoading(key: string) {
 .btn-dashed:hover {
   border-color: var(--zinc-400);
   color: var(--zinc-900);
+}
+
+/* 错误提示 */
+.error-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  background: var(--red-50);
+  border: 1px solid var(--red-200);
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+.error-text {
+  font-size: 13px;
+  color: var(--red-600);
 }
 
 /* 空状态 */

@@ -55,7 +55,11 @@ pub fn run() {
             commands::update_codex_config,
             commands::delete_codex_config,
             commands::get_codex_quota,
-            commands::get_usage
+            commands::get_usage,
+            commands::list_auth_files,
+            commands::set_auth_file_status,
+            commands::delete_auth_file,
+            commands::delete_all_auth_files
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

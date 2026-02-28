@@ -67,6 +67,20 @@ export type UsageStats = {
 // 通用命令返回值
 export type CommandResult = { ok: boolean };
 
+// 认证文件
+export type AuthFileItem = {
+  name: string;
+  type?: string;
+  provider?: string;
+  size?: number;
+  disabled?: boolean;
+  unavailable?: boolean;
+  status?: string;
+  statusMessage?: string;
+  lastRefresh?: string | number;
+  runtimeOnly?: boolean;
+};
+
 // 与 src-tauri/src/commands.rs LoginPayload 对应
 export type LoginPayload = {
   password: string;

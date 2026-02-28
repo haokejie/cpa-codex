@@ -5,6 +5,7 @@ import { useAuthStore } from "../stores/auth";
 import { useCodexStore } from "../stores/codex";
 import CodexAccountCard from "./CodexAccountCard.vue";
 import UsageStatsCard from "./UsageStatsCard.vue";
+import AuthFilesCard from "./AuthFilesCard.vue";
 
 const configStore = useConfigStore();
 const authStore = useAuthStore();
@@ -83,6 +84,8 @@ const accountLabel = computed(() => {
       </section>
 
       <CodexAccountCard />
+
+      <AuthFilesCard />
 
       <UsageStatsCard />
 
