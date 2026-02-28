@@ -1,10 +1,23 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Row, SqlitePool};
 use std::fs;
 use std::path::PathBuf;
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::Manager;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuthFileRow {
+    pub name: String,
+    #[serde(rename = "type", default)]
+    pub file_type: Option<String>,
+    #[serde(default)]
+    pub provider: Option<String>,
+    #[serde(default)]
+    pub size: Option<i64>,
+    #[serde(default)]
+    pub disabled: Option<bool>,
+}
 
 #[derive(Debug, Clone, Serialize)]
 pub struct Account {
@@ -225,6 +238,40 @@ impl Db {
         }
         Ok(())
     }
+
+    pub async fn sync_auth_files(&self, account_key: &str, files: &[AuthFileRow]) -> Result<(), String> {
+        let mut tx = self.pool.begin().await.map_err(|e| format!("开启事务失败: {e}"))?;
+        sqlx::query("DELETE FROM auth_files WHERE account_key = ?1")
+            .bind(account_key)
+            .execute(&mut *tx).await.map_err(|e| format!("清空认证文件表失败: {e}"))?;
+        for f in files {
+            sqlx::query(
+                "INSERT INTO auth_files (account_key, name, type, provider, size, disabled) VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            )
+            .bind(account_key)
+            .bind(&f.name)
+            .bind(&f.file_type)
+            .bind(&f.provider)
+            .bind(f.size)
+            .bind(if f.disabled.unwrap_or(false) { 1 } else { 0 })
+            .execute(&mut *tx).await.map_err(|e| format!("写入认证文件失败: {e}"))?;
+        }
+        tx.commit().await.map_err(|e| format!("提交事务失败: {e}"))?;
+        Ok(())
+    }
+
+    pub async fn list_auth_files(&self, account_key: &str) -> Result<Vec<AuthFileRow>, String> {
+        let rows = sqlx::query("SELECT name, type, provider, size, disabled FROM auth_files WHERE account_key = ?1 ORDER BY name")
+            .bind(account_key)
+            .fetch_all(&self.pool).await.map_err(|e| format!("读取认证文件失败: {e}"))?;
+        Ok(rows.iter().map(|r| AuthFileRow {
+            name: r.try_get("name").unwrap_or_default(),
+            file_type: r.try_get("type").ok(),
+            provider: r.try_get("provider").ok(),
+            size: r.try_get("size").ok(),
+            disabled: Some(r.try_get::<i32, _>("disabled").unwrap_or(0) != 0),
+        }).collect())
+    }
 }
 
 fn current_millis() -> i64 {
@@ -288,6 +335,28 @@ async fn ensure_schema(pool: &SqlitePool) -> Result<(), String> {
     .execute(pool)
     .await
     .map_err(|e| format!("初始化状态表失败: {e}"))?;
+
+    // 迁移：旧 auth_files 表无 account_key 列，DROP 重建（缓存可重新同步）
+    let cols = sqlx::query("PRAGMA table_info(auth_files)")
+        .fetch_all(pool).await.unwrap_or_default();
+    if !cols.is_empty() && !cols.iter().any(|r| r.try_get::<String, _>("name").unwrap_or_default() == "account_key") {
+        let _ = sqlx::query("DROP TABLE auth_files").execute(pool).await;
+    }
+
+    sqlx::query(
+        "CREATE TABLE IF NOT EXISTS auth_files (
+            account_key TEXT NOT NULL,
+            name TEXT NOT NULL,
+            type TEXT,
+            provider TEXT,
+            size INTEGER,
+            disabled INTEGER NOT NULL DEFAULT 0,
+            PRIMARY KEY (account_key, name)
+        )",
+    )
+    .execute(pool)
+    .await
+    .map_err(|e| format!("初始化认证文件表失败: {e}"))?;
 
     Ok(())
 }

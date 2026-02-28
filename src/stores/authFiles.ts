@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { AuthFileItem } from "../types";
-import { listAuthFiles, setAuthFileStatus, deleteAuthFile, deleteAllAuthFiles } from "../api/authFiles";
+import { listAuthFiles, syncAuthFiles, setAuthFileStatus, deleteAuthFile, deleteAllAuthFiles } from "../api/authFiles";
 
 export const useAuthFilesStore = defineStore("authFiles", () => {
   const files = ref<AuthFileItem[]>([]);
@@ -12,6 +12,7 @@ export const useAuthFilesStore = defineStore("authFiles", () => {
     loading.value = true;
     error.value = null;
     try {
+      await syncAuthFiles();
       files.value = await listAuthFiles();
     } catch (e) {
       error.value = String(e);

@@ -142,7 +142,7 @@ fn build_account_key(server: &str) -> String {
     server.to_string()
 }
 
-async fn resolve_session(state: &AppState) -> Result<(String, String), String> {
+async fn resolve_session(state: &AppState) -> Result<(String, String, String), String> {
     let account_key = state
         .db
         .get_last_account_key()
@@ -160,25 +160,25 @@ async fn resolve_session(state: &AppState) -> Result<(String, String), String> {
         .ok_or_else(|| "未保存密码，请重新登录".to_string())?;
     let password = crypto::decrypt_password(&encrypted)?;
     let server = auth::normalize_api_base(&account.server);
-    Ok((server, password))
+    Ok((server, password, account_key))
 }
 
 #[tauri::command]
 pub async fn get_codex_configs(state: State<'_, AppState>) -> Result<Value, String> {
-    let (server, password) = resolve_session(&state).await?;
+    let (server, password, _) = resolve_session(&state).await?;
     remote::get_codex_configs(&server, &password).await
 }
 
 #[tauri::command]
 pub async fn save_codex_configs(state: State<'_, AppState>, configs: Value) -> Result<CommandResult, String> {
-    let (server, password) = resolve_session(&state).await?;
+    let (server, password, _) = resolve_session(&state).await?;
     remote::save_codex_configs(&server, &password, configs).await?;
     Ok(CommandResult { ok: true })
 }
 
 #[tauri::command]
 pub async fn update_codex_config(state: State<'_, AppState>, index: usize, config: Value) -> Result<CommandResult, String> {
-    let (server, password) = resolve_session(&state).await?;
+    let (server, password, _) = resolve_session(&state).await?;
     let payload = serde_json::json!({ "index": index, "value": config });
     remote::update_codex_config(&server, &password, payload).await?;
     Ok(CommandResult { ok: true })
@@ -186,7 +186,7 @@ pub async fn update_codex_config(state: State<'_, AppState>, index: usize, confi
 
 #[tauri::command]
 pub async fn delete_codex_config(state: State<'_, AppState>, api_key: String) -> Result<CommandResult, String> {
-    let (server, password) = resolve_session(&state).await?;
+    let (server, password, _) = resolve_session(&state).await?;
     remote::delete_codex_config(&server, &password, &api_key).await?;
     Ok(CommandResult { ok: true })
 }
@@ -202,33 +202,50 @@ pub async fn get_codex_quota(
 
 #[tauri::command]
 pub async fn get_usage(state: State<'_, AppState>) -> Result<Value, String> {
-    let (server, password) = resolve_session(&state).await?;
+    let (server, password, _) = resolve_session(&state).await?;
     remote::get_usage(&server, &password).await
 }
 
 #[tauri::command]
-pub async fn list_auth_files(state: State<'_, AppState>) -> Result<Value, String> {
-    let (server, password) = resolve_session(&state).await?;
-    remote::list_auth_files(&server, &password).await
+pub async fn list_auth_files(state: State<'_, AppState>) -> Result<Vec<crate::db::AuthFileRow>, String> {
+    let account_key = state.db.get_last_account_key().await?.ok_or_else(|| "未登录".to_string())?;
+    state.db.list_auth_files(&account_key).await
+}
+
+#[tauri::command]
+pub async fn sync_auth_files(state: State<'_, AppState>) -> Result<CommandResult, String> {
+    let (server, password, account_key) = resolve_session(&state).await?;
+    do_sync_auth_files(&state, &server, &password, &account_key).await?;
+    Ok(CommandResult { ok: true })
+}
+
+async fn do_sync_auth_files(state: &AppState, server: &str, password: &str, account_key: &str) -> Result<(), String> {
+    let value = remote::list_auth_files(server, password).await?;
+    let files: Vec<crate::db::AuthFileRow> = serde_json::from_value(value)
+        .map_err(|e| format!("解析认证文件数据失败: {e}"))?;
+    state.db.sync_auth_files(account_key, &files).await
 }
 
 #[tauri::command]
 pub async fn set_auth_file_status(state: State<'_, AppState>, name: String, disabled: bool) -> Result<CommandResult, String> {
-    let (server, password) = resolve_session(&state).await?;
+    let (server, password, account_key) = resolve_session(&state).await?;
     remote::set_auth_file_status(&server, &password, &name, disabled).await?;
+    let _ = do_sync_auth_files(&state, &server, &password, &account_key).await;
     Ok(CommandResult { ok: true })
 }
 
 #[tauri::command]
 pub async fn delete_auth_file(state: State<'_, AppState>, name: String) -> Result<CommandResult, String> {
-    let (server, password) = resolve_session(&state).await?;
+    let (server, password, account_key) = resolve_session(&state).await?;
     remote::delete_auth_file(&server, &password, &name).await?;
+    let _ = do_sync_auth_files(&state, &server, &password, &account_key).await;
     Ok(CommandResult { ok: true })
 }
 
 #[tauri::command]
 pub async fn delete_all_auth_files(state: State<'_, AppState>) -> Result<CommandResult, String> {
-    let (server, password) = resolve_session(&state).await?;
+    let (server, password, account_key) = resolve_session(&state).await?;
     remote::delete_all_auth_files(&server, &password).await?;
+    let _ = do_sync_auth_files(&state, &server, &password, &account_key).await;
     Ok(CommandResult { ok: true })
 }

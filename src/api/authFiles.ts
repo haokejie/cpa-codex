@@ -20,3 +20,8 @@ export async function deleteAllAuthFiles(): Promise<void> {
   if (!isTauri()) return;
   return (await getInvoke())("delete_all_auth_files");
 }
+
+export async function syncAuthFiles(): Promise<void> {
+  if (!isTauri()) return;
+  return (await getInvoke())("sync_auth_files");
+}

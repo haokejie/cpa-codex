@@ -57,6 +57,7 @@ pub fn run() {
             commands::get_codex_quota,
             commands::get_usage,
             commands::list_auth_files,
+            commands::sync_auth_files,
             commands::set_auth_file_status,
             commands::delete_auth_file,
             commands::delete_all_auth_files

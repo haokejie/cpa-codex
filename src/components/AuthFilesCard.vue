@@ -1,8 +1,19 @@
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { onMounted, ref, computed, watch } from "vue";
 import { useAuthFilesStore } from "../stores/authFiles";
 
 const store = useAuthFilesStore();
+const currentPage = ref(1);
+const pageSize = 5;
+
+const totalPages = computed(() => Math.ceil(store.files.length / pageSize));
+const pagedFiles = computed(() => store.files.slice((currentPage.value - 1) * pageSize, currentPage.value * pageSize));
+
+watch(() => store.files.length, () => {
+  if (currentPage.value > totalPages.value && totalPages.value > 0) currentPage.value = totalPages.value;
+  if (totalPages.value === 0) currentPage.value = 1;
+});
+
 onMounted(() => store.fetchFiles());
 
 function typeLabel(type?: string) {
@@ -39,7 +50,7 @@ function typeLabel(type?: string) {
     </div>
 
     <div v-else class="file-list">
-      <div v-for="f in store.files" :key="f.name" class="file-row">
+      <div v-for="f in pagedFiles" :key="f.name" class="file-row">
         <div class="file-info">
           <span class="file-name" :class="{ 'file-disabled': f.disabled }">{{ f.name }}</span>
           <span class="file-type">{{ typeLabel(f.type) }}</span>
@@ -59,6 +70,14 @@ function typeLabel(type?: string) {
             @click="store.remove(f.name)"
           >删除</button>
         </div>
+      </div>
+    </div>
+
+    <div v-if="totalPages > 1" class="pagination">
+      <span class="page-info">第 {{ currentPage }}/{{ totalPages }} 页 (共 {{ store.files.length }} 个)</span>
+      <div class="page-actions">
+        <button class="btn-ghost btn-xs" :disabled="currentPage <= 1" @click="currentPage--">上一页</button>
+        <button class="btn-ghost btn-xs" :disabled="currentPage >= totalPages" @click="currentPage++">下一页</button>
       </div>
     </div>
   </section>
@@ -105,4 +124,10 @@ function typeLabel(type?: string) {
 .btn-danger:hover { background: #fef2f2; }
 .btn-sm { font-size: 12px; padding: 4px 10px; }
 .btn-xs { font-size: 11px; padding: 2px 8px; }
+.pagination {
+  display: flex; justify-content: space-between; align-items: center;
+  border-top: 1px solid var(--zinc-100); padding-top: 12px; margin-top: 8px;
+}
+.page-info { font-size: 12px; color: var(--zinc-400); }
+.page-actions { display: flex; gap: 6px; }
 </style>
