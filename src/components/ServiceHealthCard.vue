@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
+import type { CSSProperties } from "vue";
 import { useCodexStore } from "../stores/codex";
 
 const store = useCodexStore();
@@ -122,8 +123,8 @@ function refreshTooltipAnchor() {
     : null;
 }
 
-const tooltipStyle = computed(() => {
-  if (!tooltipState.value) return {};
+const tooltipStyle = computed<CSSProperties | undefined>(() => {
+  if (!tooltipState.value) return undefined;
   const translateY = tooltipState.value.placement === "above" ? "-100%" : "0";
   return {
     position: "fixed",
