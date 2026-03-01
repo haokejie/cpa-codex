@@ -354,35 +354,15 @@ async fn ensure_schema(pool: &SqlitePool) -> Result<(), String> {
     .await
     .map_err(|e| format!("初始化数据表失败: {e}"))?;
 
-    let columns = sqlx::query("PRAGMA table_info(accounts)")
-        .fetch_all(pool)
-        .await
-        .map_err(|e| format!("读取数据表结构失败: {e}"))?;
-    let mut has_remember = false;
-    let mut has_encrypted = false;
-    for row in columns {
-        let name: String = row.try_get("name").unwrap_or_default();
-        if name == "remember_password" {
-            has_remember = true;
-        }
-        if name == "encrypted_password" {
-            has_encrypted = true;
-        }
-    }
-    if !has_remember {
-        sqlx::query(
-            "ALTER TABLE accounts ADD COLUMN remember_password INTEGER NOT NULL DEFAULT 0",
-        )
-        .execute(pool)
-        .await
-        .map_err(|e| format!("升级数据表失败: {e}"))?;
-    }
-    if !has_encrypted {
-        sqlx::query("ALTER TABLE accounts ADD COLUMN encrypted_password TEXT")
-            .execute(pool)
-            .await
-            .map_err(|e| format!("升级数据表失败: {e}"))?;
-    }
+    ensure_columns(
+        pool,
+        "accounts",
+        &[
+            ("remember_password", "INTEGER NOT NULL DEFAULT 0"),
+            ("encrypted_password", "TEXT"),
+        ],
+    )
+    .await?;
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS app_state (
@@ -395,9 +375,8 @@ async fn ensure_schema(pool: &SqlitePool) -> Result<(), String> {
     .map_err(|e| format!("初始化状态表失败: {e}"))?;
 
     // 迁移：旧 auth_files 表无 account_key 列，DROP 重建（缓存可重新同步）
-    let cols = sqlx::query("PRAGMA table_info(auth_files)")
-        .fetch_all(pool).await.unwrap_or_default();
-    if !cols.is_empty() && !cols.iter().any(|r| r.try_get::<String, _>("name").unwrap_or_default() == "account_key") {
+    let cols = get_table_columns(pool, "auth_files").await.unwrap_or_default();
+    if !cols.is_empty() && !cols.iter().any(|name| name == "account_key") {
         let _ = sqlx::query("DROP TABLE auth_files").execute(pool).await;
     }
 
@@ -421,20 +400,85 @@ async fn ensure_schema(pool: &SqlitePool) -> Result<(), String> {
     .map_err(|e| format!("初始化认证文件表失败: {e}"))?;
 
     // 迁移：auth_files 表新增状态列
-    let af_cols = sqlx::query("PRAGMA table_info(auth_files)")
-        .fetch_all(pool).await.unwrap_or_default();
-    let af_col_names: Vec<String> = af_cols.iter().map(|r| r.try_get("name").unwrap_or_default()).collect();
-    for (col, def) in [
-        ("unavailable", "INTEGER NOT NULL DEFAULT 0"),
-        ("status", "TEXT"),
-        ("status_message", "TEXT"),
-        ("last_refresh", "TEXT"),
-    ] {
-        if !af_col_names.contains(&col.to_string()) {
-            let sql = format!("ALTER TABLE auth_files ADD COLUMN {col} {def}");
-            let _ = sqlx::query(&sql).execute(pool).await;
-        }
-    }
+    ensure_columns(
+        pool,
+        "auth_files",
+        &[
+            ("unavailable", "INTEGER NOT NULL DEFAULT 0"),
+            ("status", "TEXT"),
+            ("status_message", "TEXT"),
+            ("last_refresh", "TEXT"),
+        ],
+    )
+    .await?;
 
     Ok(())
+}
+
+async fn get_table_columns(pool: &SqlitePool, table: &str) -> Result<Vec<String>, String> {
+    let sql = format!("PRAGMA table_info({table})");
+    let rows = sqlx::query(&sql)
+        .fetch_all(pool)
+        .await
+        .map_err(|e| format!("读取数据表结构失败: {e}"))?;
+    Ok(rows
+        .iter()
+        .map(|r| r.try_get::<String, _>("name").unwrap_or_default())
+        .collect())
+}
+
+async fn ensure_columns(
+    pool: &SqlitePool,
+    table: &str,
+    columns: &[(&str, &str)],
+) -> Result<(), String> {
+    let existing = get_table_columns(pool, table).await?;
+    for (col, def) in columns {
+        if !existing.iter().any(|name| name == col) {
+            let sql = format!("ALTER TABLE {table} ADD COLUMN {col} {def}");
+            sqlx::query(&sql)
+                .execute(pool)
+                .await
+                .map_err(|e| format!("升级数据表失败: {e}"))?;
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sqlx::sqlite::SqlitePoolOptions;
+
+    #[test]
+    fn ensure_schema_adds_columns() {
+        tauri::async_runtime::block_on(async {
+            let pool = SqlitePoolOptions::new()
+                .max_connections(1)
+                .connect("sqlite::memory:")
+                .await
+                .expect("connect sqlite memory");
+
+            ensure_schema(&pool).await.expect("ensure schema");
+
+            let accounts_cols = get_table_columns(&pool, "accounts")
+                .await
+                .expect("get accounts columns");
+            assert!(accounts_cols.iter().any(|c| c == "remember_password"));
+            assert!(accounts_cols.iter().any(|c| c == "encrypted_password"));
+
+            let auth_cols = get_table_columns(&pool, "auth_files")
+                .await
+                .expect("get auth_files columns");
+            for col in [
+                "account_key",
+                "unavailable",
+                "status",
+                "status_message",
+                "last_refresh",
+            ] {
+                assert!(auth_cols.iter().any(|c| c == col));
+            }
+        });
+    }
 }
