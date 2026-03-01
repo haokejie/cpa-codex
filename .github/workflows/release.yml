@@ -1,0 +1,147 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [macos-latest, ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libxdo-dev \
+            libssl-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: pnpm
+
+      - name: Enable pnpm via corepack
+        run: |
+          corepack enable
+          corepack prepare pnpm@10.26.1 --activate
+
+      - name: Setup Rust toolchain
+        run: |
+          rustup update stable
+          rustup default stable
+
+      - name: Cache Rust
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            src-tauri/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('src-tauri/Cargo.lock') }}
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Tauri app
+        run: pnpm tauri build
+
+      - name: Prepare release artifacts
+        shell: bash
+        env:
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG_NAME#v}"
+          APP_PREFIX="CPA.Codex"
+          OUT_DIR="release-assets"
+
+          rm -rf "$OUT_DIR"
+          mkdir -p "$OUT_DIR"
+
+          detect_arch() {
+            local name="$1"
+            if [[ "$name" == *"universal"* ]]; then
+              echo "universal"; return
+            fi
+            if [[ "$name" == *"aarch64"* || "$name" == *"arm64"* ]]; then
+              echo "aarch64"; return
+            fi
+            if [[ "$name" == *"x64"* || "$name" == *"x86_64"* || "$name" == *"amd64"* ]]; then
+              echo "x64"; return
+            fi
+            if [[ "$name" == *"i686"* || "$name" == *"x86"* ]]; then
+              echo "x86"; return
+            fi
+            echo ""
+          }
+
+          detect_ext() {
+            local name="$1"
+            case "$name" in
+              *.tar.gz) echo ".tar.gz" ;;
+              *.dmg) echo ".dmg" ;;
+              *.AppImage) echo ".AppImage" ;;
+              *.deb) echo ".deb" ;;
+              *.rpm) echo ".rpm" ;;
+              *.msi) echo ".msi" ;;
+              *.exe) echo ".exe" ;;
+              *.zip) echo ".zip" ;;
+              *) echo "" ;;
+            esac
+          }
+
+          while IFS= read -r -d '' f; do
+            base="$(basename "$f")"
+            ext="$(detect_ext "$base")"
+            if [[ -z "$ext" ]]; then
+              continue
+            fi
+            arch="$(detect_arch "$base")"
+            if [[ -z "$arch" ]]; then
+              cp "$f" "$OUT_DIR/$base"
+            else
+              cp "$f" "$OUT_DIR/${APP_PREFIX}_${VERSION}_${arch}${ext}"
+            fi
+          done < <(
+            find src-tauri/target/release/bundle -type f \
+              \( -name '*.tar.gz' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.msi' -o -name '*.exe' -o -name '*.zip' \) \
+              -print0
+          )
+
+          if [ -z "$(ls -A "$OUT_DIR")" ]; then
+            echo "No release artifacts found under src-tauri/target/release/bundle." >&2
+            exit 1
+          fi
+
+      - name: Create or update release and upload artifacts
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          VERSION="${TAG_NAME#v}"
+          gh release create "$TAG_NAME" \
+            --draft \
+            --title "CPA Codex v${VERSION}" \
+            --notes "See the assets to download and install this version." || true
+
+          gh release upload "$TAG_NAME" release-assets/* --clobber
