@@ -62,10 +62,26 @@ function isExpiredMessage(message?: string) {
   return false;
 }
 
+function isQuotaExhaustedMessage(message?: string) {
+  if (!message) return false;
+  const raw = message.trim();
+  const lower = raw.toLowerCase();
+  if (lower.includes("usage_limit_reached")) return true;
+  if (lower.includes("usage limit") && lower.includes("reached")) return true;
+  if (lower.includes("quota") && lower.includes("reached")) return true;
+  try {
+    const parsed = JSON.parse(raw) as { error?: { type?: string; code?: string } };
+    if (parsed?.error?.type === "usage_limit_reached") return true;
+    if (parsed?.error?.code === "usage_limit_reached") return true;
+  } catch { /* 非 JSON 文本 */ }
+  return false;
+}
+
 function statusKind(f: { disabled?: boolean; unavailable?: boolean; statusMessage?: string; status?: string }) {
   if (f.disabled) return 'disabled';
   const rawMessage = f.statusMessage ?? (f as { status_message?: string }).status_message;
   if (isExpiredMessage(rawMessage)) return 'expired';
+  if (isQuotaExhaustedMessage(rawMessage)) return 'exhausted';
   if (f.unavailable) return 'error';
   if (rawMessage) {
     const m = rawMessage.trim().toLowerCase();
@@ -185,7 +201,7 @@ async function confirmDelete() {
         <span class="col-type file-type">{{ typeLabel(f.type) }}</span>
         <span class="col-status">
           <span class="badge" :class="'badge-' + statusKind(f)">
-            {{ { healthy: '健康', expired: '过期', abnormal: '异常', error: '不可用', disabled: '已禁用' }[statusKind(f)] }}
+            {{ { healthy: '健康', expired: '过期', exhausted: '额度耗尽', abnormal: '异常', error: '不可用', disabled: '已禁用' }[statusKind(f)] }}
           </span>
         </span>
         <span class="col-refresh last-refresh">{{ f.lastRefresh ? formatTime(f.lastRefresh) : '-' }}</span>
@@ -256,7 +272,7 @@ async function confirmDelete() {
           <div v-for="f in cleanTargets" :key="f.name" class="dialog-item">
             <span class="dialog-key">{{ f.name }}</span>
             <span class="dialog-status" :class="'status-' + statusKind(f)">
-              {{ { expired: '过期', error: '不可用', abnormal: '异常', disabled: '已禁用', healthy: '健康' }[statusKind(f)] }}
+              {{ { expired: '过期', exhausted: '额度耗尽', error: '不可用', abnormal: '异常', disabled: '已禁用', healthy: '健康' }[statusKind(f)] }}
             </span>
           </div>
         </div>
@@ -321,6 +337,7 @@ async function confirmDelete() {
 .badge-healthy { background: #f0fdf4; color: #16a34a; }
 .badge-warning { background: #fefce8; color: #ca8a04; }
 .badge-expired { background: #fff7ed; color: #c2410c; }
+.badge-exhausted { background: #fefce8; color: #ca8a04; }
 .badge-abnormal { background: #fef2f2; color: #dc2626; }
 .badge-error { background: #fef2f2; color: #dc2626; }
 .badge-disabled { background: var(--zinc-100); color: var(--zinc-400); }
@@ -459,6 +476,9 @@ async function confirmDelete() {
 .status-expired,
 .status-error {
   color: #dc2626;
+}
+.status-exhausted {
+  color: #ca8a04;
 }
 .dialog-footer {
   display: flex;

@@ -249,12 +249,51 @@ impl Db {
 
     pub async fn sync_auth_files(&self, account_key: &str, files: &[AuthFileRow]) -> Result<(), String> {
         let mut tx = self.pool.begin().await.map_err(|e| format!("开启事务失败: {e}"))?;
-        sqlx::query("DELETE FROM auth_files WHERE account_key = ?1")
-            .bind(account_key)
-            .execute(&mut *tx).await.map_err(|e| format!("清空认证文件表失败: {e}"))?;
+
+        if files.is_empty() {
+            sqlx::query("DELETE FROM auth_files WHERE account_key = ?1")
+                .bind(account_key)
+                .execute(&mut *tx)
+                .await
+                .map_err(|e| format!("清空认证文件表失败: {e}"))?;
+            tx.commit().await.map_err(|e| format!("提交事务失败: {e}"))?;
+            return Ok(());
+        }
+
+        let mut unique_names = std::collections::HashSet::new();
+        for f in files {
+            unique_names.insert(f.name.as_str());
+        }
+
+        let mut delete_query = sqlx::QueryBuilder::new(
+            "DELETE FROM auth_files WHERE account_key = ",
+        );
+        delete_query.push_bind(account_key);
+        delete_query.push(" AND name NOT IN (");
+        let mut separated = delete_query.separated(", ");
+        for name in unique_names.iter() {
+            separated.push_bind(name);
+        }
+        delete_query.push(")");
+        delete_query
+            .build()
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("清理过期认证文件失败: {e}"))?;
+
         for f in files {
             sqlx::query(
-                "INSERT INTO auth_files (account_key, name, type, provider, size, disabled, unavailable, status, status_message, last_refresh) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                "INSERT INTO auth_files (account_key, name, type, provider, size, disabled, unavailable, status, status_message, last_refresh)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                 ON CONFLICT(account_key, name) DO UPDATE SET
+                   type = excluded.type,
+                   provider = excluded.provider,
+                   size = excluded.size,
+                   disabled = excluded.disabled,
+                   unavailable = excluded.unavailable,
+                   status = excluded.status,
+                   status_message = excluded.status_message,
+                   last_refresh = excluded.last_refresh",
             )
             .bind(account_key)
             .bind(&f.name)
@@ -266,8 +305,11 @@ impl Db {
             .bind(&f.status)
             .bind(&f.status_message)
             .bind(&f.last_refresh)
-            .execute(&mut *tx).await.map_err(|e| format!("写入认证文件失败: {e}"))?;
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("写入认证文件失败: {e}"))?;
         }
+
         tx.commit().await.map_err(|e| format!("提交事务失败: {e}"))?;
         Ok(())
     }
