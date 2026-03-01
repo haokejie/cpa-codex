@@ -1,4 +1,4 @@
-import type { Account, AppConfig, CodexConfig, CommandResult } from "../types";
+import type { Account, AppConfig, AuthFileItem, CodexConfig, CommandResult } from "../types";
 
 // Account mocks
 export async function login(): Promise<CommandResult> {
@@ -141,8 +141,21 @@ export async function getUsage(): Promise<Record<string, unknown>> {
   };
 }
 
+// API Keys mocks
+export async function listApiKeys(): Promise<string[]> {
+  return [
+    "sk-demo-001-abcdefghijklmnopqrstuvwxyz",
+    "sk-demo-002-abcdefghijklmnopqrstuvwxyz",
+  ];
+}
+
+export async function replaceApiKeys(): Promise<void> {}
+
+export async function updateApiKey(): Promise<void> {}
+
+export async function deleteApiKey(): Promise<void> {}
+
 // AuthFiles mocks
-import type { AuthFileItem } from "../types";
 export async function listAuthFiles(): Promise<AuthFileItem[]> {
   return [
     { name: "claude_oauth_token.json", type: "claude", disabled: false, statusMessage: "ok", lastRefresh: Date.now() / 1000 - 300 },
@@ -151,4 +164,8 @@ export async function listAuthFiles(): Promise<AuthFileItem[]> {
     { name: "codex_auth.json", type: "codex", disabled: false, unavailable: true, statusMessage: "token expired", lastRefresh: Date.now() / 1000 - 86400 },
     { name: "runtime_session.json", type: "session", runtimeOnly: true, statusMessage: "ok", lastRefresh: Date.now() / 1000 - 60 },
   ];
+}
+
+export async function uploadAuthFile(_file: File): Promise<void> {
+  return;
 }

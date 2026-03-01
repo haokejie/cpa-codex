@@ -210,6 +210,33 @@ pub async fn delete_codex_config(state: State<'_, AppState>, api_key: String) ->
 }
 
 #[tauri::command]
+pub async fn list_api_keys(state: State<'_, AppState>) -> Result<Vec<String>, String> {
+    let (server, password, _) = resolve_session(&state).await?;
+    remote::list_api_keys(&server, &password).await
+}
+
+#[tauri::command]
+pub async fn replace_api_keys(state: State<'_, AppState>, keys: Vec<String>) -> Result<CommandResult, String> {
+    let (server, password, _) = resolve_session(&state).await?;
+    remote::replace_api_keys(&server, &password, keys).await?;
+    Ok(CommandResult { ok: true })
+}
+
+#[tauri::command]
+pub async fn update_api_key(state: State<'_, AppState>, index: usize, value: String) -> Result<CommandResult, String> {
+    let (server, password, _) = resolve_session(&state).await?;
+    remote::update_api_key(&server, &password, index, value).await?;
+    Ok(CommandResult { ok: true })
+}
+
+#[tauri::command]
+pub async fn delete_api_key(state: State<'_, AppState>, index: usize) -> Result<CommandResult, String> {
+    let (server, password, _) = resolve_session(&state).await?;
+    remote::delete_api_key(&server, &password, index).await?;
+    Ok(CommandResult { ok: true })
+}
+
+#[tauri::command]
 pub async fn get_codex_quota(
     api_key: String,
     base_url: Option<String>,
@@ -234,6 +261,14 @@ pub async fn list_auth_files(state: State<'_, AppState>) -> Result<Vec<crate::db
 pub async fn sync_auth_files(state: State<'_, AppState>) -> Result<CommandResult, String> {
     let (server, password, account_key) = resolve_session(&state).await?;
     do_sync_auth_files(&state, &server, &password, &account_key).await?;
+    Ok(CommandResult { ok: true })
+}
+
+#[tauri::command]
+pub async fn upload_auth_file(state: State<'_, AppState>, name: String, bytes: Vec<u8>) -> Result<CommandResult, String> {
+    let (server, password, account_key) = resolve_session(&state).await?;
+    remote::upload_auth_file(&server, &password, &name, bytes).await?;
+    let _ = do_sync_auth_files(&state, &server, &password, &account_key).await;
     Ok(CommandResult { ok: true })
 }
 

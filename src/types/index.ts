@@ -90,6 +90,22 @@ export type UsageSparklineSeries = {
   hasData: boolean;
 };
 
+export type ApiModelStats = {
+  requests: number;
+  successCount: number;
+  failureCount: number;
+  tokens: number;
+};
+
+export type ApiStats = {
+  endpoint: string;
+  totalRequests: number;
+  successCount: number;
+  failureCount: number;
+  totalTokens: number;
+  models: Record<string, ApiModelStats>;
+};
+
 export type StatusBlockState = 'idle' | 'success' | 'failure' | 'mixed';
 
 export type StatusBlockDetail = {

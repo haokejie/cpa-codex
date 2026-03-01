@@ -40,3 +40,9 @@ export async function syncAuthFiles(): Promise<void> {
   if (!isTauri()) return;
   return (await getInvoke())("sync_auth_files");
 }
+
+export async function uploadAuthFile(file: File): Promise<void> {
+  if (!isTauri()) return mock.uploadAuthFile(file);
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  return (await getInvoke())("upload_auth_file", { name: file.name, bytes: Array.from(bytes) });
+}

@@ -1,4 +1,6 @@
 import type {
+  ApiModelStats,
+  ApiStats,
   ServiceHealthData,
   StatusBlockDetail,
   StatusBlockState,
@@ -673,4 +675,169 @@ export function formatCompactNumber(value: number): string {
   if (abs >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000) return `${(num / 1_000).toFixed(1)}K`;
   return abs >= 1 ? num.toFixed(0) : num.toFixed(2);
+}
+
+const readTotalTokens = (obj: RecordValue): number | undefined =>
+  readTokenNumber(obj, "total_tokens") ?? readTokenNumber(obj, "totalTokens");
+
+const summarizeDetailList = (details: unknown[]): ApiModelStats => {
+  let requests = 0;
+  let successCount = 0;
+  let failureCount = 0;
+  let tokens = 0;
+  details.forEach((detail) => {
+    if (!isRecord(detail)) return;
+    requests += 1;
+    if (detail.failed === true) {
+      failureCount += 1;
+    } else {
+      successCount += 1;
+    }
+    tokens += extractTotalTokens(detail);
+  });
+  return { requests, successCount, failureCount, tokens };
+};
+
+export type UsageTimeRange = "all" | "24h" | "today";
+
+const isWithinRange = (timestampMs: number, range: UsageTimeRange, nowMs: number): boolean => {
+  if (!Number.isFinite(timestampMs) || timestampMs <= 0) return false;
+  if (range === "all") return true;
+  if (range === "24h") {
+    return timestampMs >= nowMs - 24 * 60 * 60 * 1000 && timestampMs <= nowMs;
+  }
+  const start = new Date(nowMs);
+  start.setHours(0, 0, 0, 0);
+  const startMs = start.getTime();
+  const endMs = startMs + 24 * 60 * 60 * 1000;
+  return timestampMs >= startMs && timestampMs < endMs;
+};
+
+const filterDetailsByRange = (details: unknown[], range: UsageTimeRange, nowMs: number): unknown[] => {
+  if (range === "all") return details;
+  return details.filter((detail) => {
+    if (!isRecord(detail)) return false;
+    const ts = parseTimestampMs(detail.timestamp);
+    return isWithinRange(ts, range, nowMs);
+  });
+};
+
+export function buildApiStats(raw: unknown, range: UsageTimeRange = "all", nowMs: number = Date.now()): ApiStats[] {
+  const usage = isRecord(raw) ? raw : null;
+  if (!usage) return [];
+
+  const apisRaw = usage.apis;
+  const apiEntries: Array<[string, RecordValue]> = [];
+
+  if (isRecord(apisRaw)) {
+    Object.entries(apisRaw).forEach(([endpoint, entry]) => {
+      if (isRecord(entry)) apiEntries.push([endpoint, entry]);
+    });
+  } else if (Array.isArray(apisRaw)) {
+    apisRaw.forEach((entry, idx) => {
+      if (isRecord(entry)) apiEntries.push([`API #${idx + 1}`, entry]);
+    });
+  }
+
+  if (!apiEntries.length) return [];
+
+  const results: ApiStats[] = [];
+
+  apiEntries.forEach(([endpoint, apiEntry]) => {
+    const models: Record<string, ApiModelStats> = {};
+    let totalRequests = 0;
+    let successCount = 0;
+    let failureCount = 0;
+    let totalTokens = 0;
+    let used = false;
+
+    const modelsObj = isRecord(apiEntry.models) ? apiEntry.models : null;
+    const modelEntries = modelsObj
+      ? Object.entries(modelsObj)
+      : Array.isArray(apiEntry.models)
+        ? apiEntry.models.map((entry, idx) => [`model-${idx + 1}`, entry] as [string, unknown])
+        : null;
+
+    if (modelEntries) {
+      modelEntries.forEach(([modelName, modelEntry]) => {
+        if (!isRecord(modelEntry)) return;
+        const detailList = Array.isArray(modelEntry.details)
+          ? modelEntry.details
+          : Array.isArray((modelEntry as RecordValue).events)
+            ? (modelEntry as RecordValue).events as unknown[]
+            : null;
+
+        let stats: ApiModelStats | null = null;
+        if (detailList && detailList.length) {
+          const filtered = filterDetailsByRange(detailList, range, nowMs);
+          if (filtered.length) {
+            stats = summarizeDetailList(filtered);
+          }
+        } else if (range === "all") {
+          const summary = readSummary(modelEntry);
+          const tokenTotal = readTotalTokens(modelEntry);
+          if (summary || tokenTotal !== undefined) {
+            stats = {
+              requests: summary?.totalRequests ?? 0,
+              successCount: summary?.successCount ?? 0,
+              failureCount: summary?.failCount ?? 0,
+              tokens: tokenTotal ?? 0,
+            };
+          }
+        }
+
+        if (!stats) return;
+        if (stats.requests === 0 && stats.tokens === 0 && stats.successCount === 0 && stats.failureCount === 0) {
+          return;
+        }
+
+        models[modelName] = stats;
+        totalRequests += stats.requests;
+        successCount += stats.successCount;
+        failureCount += stats.failureCount;
+        totalTokens += stats.tokens;
+        used = true;
+      });
+    }
+
+    if (!used) {
+      const apiDetails = Array.isArray(apiEntry.details) ? apiEntry.details : null;
+      if (apiDetails && apiDetails.length) {
+        const filtered = filterDetailsByRange(apiDetails, range, nowMs);
+        if (filtered.length) {
+          const stats = summarizeDetailList(filtered);
+          totalRequests = stats.requests;
+          successCount = stats.successCount;
+          failureCount = stats.failureCount;
+          totalTokens = stats.tokens;
+          used = true;
+        }
+      }
+    }
+
+    if (!used && range === "all") {
+      const summary = readSummary(apiEntry);
+      const tokenTotal = readTotalTokens(apiEntry);
+      if (summary || tokenTotal !== undefined) {
+        totalRequests = summary?.totalRequests ?? 0;
+        successCount = summary?.successCount ?? 0;
+        failureCount = summary?.failCount ?? 0;
+        totalTokens = tokenTotal ?? 0;
+        used = true;
+      }
+    }
+
+    if (!used) return;
+
+    results.push({
+      endpoint,
+      totalRequests,
+      successCount,
+      failureCount,
+      totalTokens,
+      models,
+    });
+  });
+
+  return results;
 }

@@ -13,6 +13,9 @@ const showCleanDialog = ref(false);
 const cleaning = ref(false);
 const showDeleteDialog = ref(false);
 const pendingDeleteName = ref('');
+const fileInput = ref<HTMLInputElement | null>(null);
+
+const MAX_AUTH_FILE_SIZE = 10 * 1024 * 1024;
 
 function isCodexFile(f: { type?: string; provider?: string }) {
   return f.type === 'codex' || f.provider === 'codex';
@@ -40,6 +43,50 @@ function doJump() {
 }
 
 onMounted(() => store.fetchFiles());
+
+function formatFileSize(size: number) {
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function handleUploadClick() {
+  fileInput.value?.click();
+}
+
+async function handleFileChange(event: Event) {
+  const input = event.target as HTMLInputElement;
+  const list = input.files ? Array.from(input.files) : [];
+  if (!list.length) return;
+
+  const valid: File[] = [];
+  const invalid: string[] = [];
+  const oversized: string[] = [];
+  list.forEach((file) => {
+    if (!file.name.toLowerCase().endsWith(".json")) {
+      invalid.push(file.name);
+      return;
+    }
+    if (file.size > MAX_AUTH_FILE_SIZE) {
+      oversized.push(file.name);
+      return;
+    }
+    valid.push(file);
+  });
+
+  const errors: string[] = [];
+  if (invalid.length) errors.push(`仅支持 .json 文件：${invalid.join(", ")}`);
+  if (oversized.length) {
+    errors.push(`文件过大（最大 ${formatFileSize(MAX_AUTH_FILE_SIZE)}）：${oversized.join(", ")}`);
+  }
+  store.setUploadError(errors.length ? errors.join("；") : null);
+
+  if (valid.length) {
+    await store.uploadFiles(valid);
+  }
+
+  input.value = "";
+}
 
 function typeLabel(type?: string) {
   return type || "unknown";
@@ -166,6 +213,9 @@ async function confirmDelete() {
         </div>
         <div class="head-actions">
           <button class="btn-ghost btn-sm" @click="store.fetchFiles" :disabled="store.loading">刷新</button>
+          <button class="btn-ghost btn-sm" @click="handleUploadClick" :disabled="store.loading || store.uploading">
+            {{ store.uploading ? "上传中..." : "上传" }}
+          </button>
           <button class="btn-ghost btn-sm btn-ghost-danger" @click="openCleanDialog" :disabled="!cleanTargets.length">一键清理</button>
           <button class="btn-danger btn-sm" @click="showConfirm = true" :disabled="!store.files.length">清空</button>
         </div>
@@ -176,6 +226,19 @@ async function confirmDelete() {
       <span class="error-text">{{ store.error }}</span>
       <button class="btn-ghost btn-sm" @click="store.fetchFiles">重试</button>
     </div>
+    <div v-if="store.uploadError" class="error-banner">
+      <span class="error-text">{{ store.uploadError }}</span>
+      <button class="btn-ghost btn-sm" @click="store.setUploadError(null)">关闭</button>
+    </div>
+
+    <input
+      ref="fileInput"
+      type="file"
+      accept=".json,application/json"
+      multiple
+      style="display: none"
+      @change="handleFileChange"
+    />
 
     <div v-if="store.loading" class="empty-state keep-height">
       <p class="empty-text">加载中...</p>

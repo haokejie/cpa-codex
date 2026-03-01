@@ -1,12 +1,14 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { AuthFileItem } from "../types";
-import { listAuthFiles, syncAuthFiles, setAuthFileStatus, deleteAuthFile, deleteAllAuthFiles } from "../api/authFiles";
+import { listAuthFiles, syncAuthFiles, setAuthFileStatus, deleteAuthFile, deleteAllAuthFiles, uploadAuthFile } from "../api/authFiles";
 
 export const useAuthFilesStore = defineStore("authFiles", () => {
   const files = ref<AuthFileItem[]>([]);
   const loading = ref(false);
   const error = ref<string | null>(null);
+  const uploading = ref(false);
+  const uploadError = ref<string | null>(null);
 
   async function fetchFiles() {
     loading.value = true;
@@ -19,6 +21,32 @@ export const useAuthFilesStore = defineStore("authFiles", () => {
     } finally {
       loading.value = false;
     }
+  }
+
+  function setUploadError(message: string | null) {
+    uploadError.value = message;
+  }
+
+  async function uploadFiles(items: File[]) {
+    const filesToUpload = items.filter(Boolean);
+    if (filesToUpload.length === 0) return { uploaded: [], failed: [] };
+    uploading.value = true;
+    uploadError.value = null;
+    const results = await Promise.allSettled(filesToUpload.map((file) => uploadAuthFile(file)));
+    const uploaded: string[] = [];
+    const failed: string[] = [];
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") uploaded.push(filesToUpload[index].name);
+      else failed.push(filesToUpload[index].name);
+    });
+    if (uploaded.length > 0) {
+      await fetchFiles();
+    }
+    if (failed.length > 0) {
+      uploadError.value = `上传失败：${failed.join(", ")}`;
+    }
+    uploading.value = false;
+    return { uploaded, failed };
   }
 
   async function toggleDisabled(name: string, disabled: boolean) {
@@ -54,5 +82,18 @@ export const useAuthFilesStore = defineStore("authFiles", () => {
     files.value = [];
   }
 
-  return { files, loading, error, fetchFiles, toggleDisabled, remove, removeBatch, removeAll };
+  return {
+    files,
+    loading,
+    error,
+    uploading,
+    uploadError,
+    fetchFiles,
+    setUploadError,
+    uploadFiles,
+    toggleDisabled,
+    remove,
+    removeBatch,
+    removeAll
+  };
 });

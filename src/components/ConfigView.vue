@@ -9,6 +9,8 @@ import ServiceHealthCard from "./ServiceHealthCard.vue";
 import CredentialStatsCard from "./CredentialStatsCard.vue";
 import RequestEventsDetailsCard from "./RequestEventsDetailsCard.vue";
 import AuthFilesCard from "./AuthFilesCard.vue";
+import ApiDetailsCard from "./ApiDetailsCard.vue";
+import ApiKeysCard from "./ApiKeysCard.vue";
 
 const configStore = useConfigStore();
 const authStore = useAuthStore();
@@ -20,12 +22,14 @@ onMounted(() => {
   codexStore.refreshQuotas();
 });
 
-type TabKey = 'codex' | 'auth' | 'usage' | 'settings';
+type TabKey = 'codex' | 'auth' | 'api-keys' | 'usage' | 'api-details' | 'settings';
 const activeTab = ref<TabKey>('auth');
 
 const mainTabs: { key: TabKey; label: string }[] = [
   { key: 'auth', label: '认证' },
+  { key: 'api-keys', label: '密钥' },
   { key: 'usage', label: '统计' },
+  { key: 'api-details', label: 'API 明细' },
 ];
 
 const accountLabel = computed(() => {
@@ -82,6 +86,16 @@ const accountLabel = computed(() => {
           <svg v-else-if="t.key === 'auth'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>
           </svg>
+          <svg v-else-if="t.key === 'api-keys'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="7.5" cy="14.5" r="3.5"/>
+            <path d="M10.5 14.5h8l2 2-2 2h-2l-1 1-1-1h-2"/>
+          </svg>
+          <svg v-else-if="t.key === 'usage'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
+          </svg>
+          <svg v-else-if="t.key === 'api-details'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4h16v4H4z"/><path d="M4 10h16v4H4z"/><path d="M4 16h10v4H4z"/>
+          </svg>
           <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
           </svg>
@@ -108,12 +122,20 @@ const accountLabel = computed(() => {
           <!-- 认证文件 -->
           <AuthFilesCard v-if="activeTab === 'auth'" />
 
+          <!-- API 密钥 -->
+          <ApiKeysCard v-if="activeTab === 'api-keys'" />
+
           <!-- 使用统计 -->
           <template v-if="activeTab === 'usage'">
             <UsageStatsCard />
             <ServiceHealthCard />
             <CredentialStatsCard />
             <RequestEventsDetailsCard />
+          </template>
+
+          <!-- API 详细统计 -->
+          <template v-if="activeTab === 'api-details'">
+            <ApiDetailsCard />
           </template>
 
           <!-- 设置 -->

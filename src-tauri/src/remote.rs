@@ -1,3 +1,4 @@
+use reqwest::multipart::{Form, Part};
 use reqwest::StatusCode;
 use serde_json::Value;
 use std::time::Duration;
@@ -6,6 +7,7 @@ use crate::auth::normalize_api_base;
 
 const MANAGEMENT_API_PREFIX: &str = "/v0/management";
 const CODEX_API_KEY_PATH: &str = "/codex-api-key";
+const API_KEYS_PATH: &str = "/api-keys";
 const DEFAULT_CODEX_BASE_URL: &str = "https://api.openai.com";
 const CODEX_USAGE_PATH: &str = "/dashboard/user/codex_usage";
 const REQUEST_TIMEOUT_SECS: u64 = 30;
@@ -40,6 +42,24 @@ pub async fn delete_auth_file(server: &str, password: &str, name: &str) -> Resul
 pub async fn delete_all_auth_files(server: &str, password: &str) -> Result<(), String> {
     let url = format!("{}?all=true", build_url(server, "/auth-files"));
     let resp = client()?.delete(&url).bearer_auth(password).send().await.map_err(map_error)?;
+    if !resp.status().is_success() { return Err(map_status(resp.status())); }
+    Ok(())
+}
+
+pub async fn upload_auth_file(server: &str, password: &str, name: &str, bytes: Vec<u8>) -> Result<(), String> {
+    let url = build_url(server, "/auth-files");
+    let part = Part::bytes(bytes)
+        .file_name(name.to_string())
+        .mime_str("application/json")
+        .map_err(|e| format!("构建上传文件失败: {e}"))?;
+    let form = Form::new().part("file", part);
+    let resp = client()?
+        .post(&url)
+        .bearer_auth(password)
+        .multipart(form)
+        .send()
+        .await
+        .map_err(map_error)?;
     if !resp.status().is_success() { return Err(map_status(resp.status())); }
     Ok(())
 }
@@ -184,6 +204,94 @@ pub async fn delete_codex_config(server: &str, password: &str, api_key: &str) ->
         build_url(server, CODEX_API_KEY_PATH),
         api_key
     );
+    let resp = client()?
+        .delete(&url)
+        .bearer_auth(password)
+        .send()
+        .await
+        .map_err(map_error)?;
+    if !resp.status().is_success() {
+        return Err(map_status(resp.status()));
+    }
+    Ok(())
+}
+
+fn value_to_string(value: &Value) -> String {
+    match value {
+        Value::String(s) => s.clone(),
+        Value::Number(n) => n.to_string(),
+        Value::Bool(b) => b.to_string(),
+        Value::Null => "".to_string(),
+        other => other.to_string(),
+    }
+}
+
+pub async fn list_api_keys(server: &str, password: &str) -> Result<Vec<String>, String> {
+    let url = build_url(server, API_KEYS_PATH);
+    let resp = client()?
+        .get(&url)
+        .bearer_auth(password)
+        .send()
+        .await
+        .map_err(map_error)?;
+    if !resp.status().is_success() {
+        return Err(map_status(resp.status()));
+    }
+    let body: Value = resp.json().await.map_err(|e| format!("解析响应失败: {e}"))?;
+    let keys_value = match &body {
+        Value::Array(_) => &body,
+        Value::Object(obj) => obj
+            .get("api-keys")
+            .or_else(|| obj.get("apiKeys"))
+            .unwrap_or(&body),
+        _ => &body,
+    };
+    let keys = keys_value
+        .as_array()
+        .map(|items| {
+            items
+                .iter()
+                .map(value_to_string)
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    Ok(keys)
+}
+
+pub async fn replace_api_keys(server: &str, password: &str, keys: Vec<String>) -> Result<(), String> {
+    let url = build_url(server, API_KEYS_PATH);
+    let resp = client()?
+        .put(&url)
+        .bearer_auth(password)
+        .json(&keys)
+        .send()
+        .await
+        .map_err(map_error)?;
+    if !resp.status().is_success() {
+        return Err(map_status(resp.status()));
+    }
+    Ok(())
+}
+
+pub async fn update_api_key(server: &str, password: &str, index: usize, value: String) -> Result<(), String> {
+    let url = build_url(server, API_KEYS_PATH);
+    let resp = client()?
+        .patch(&url)
+        .bearer_auth(password)
+        .json(&serde_json::json!({ "index": index, "value": value }))
+        .send()
+        .await
+        .map_err(map_error)?;
+    if !resp.status().is_success() {
+        return Err(map_status(resp.status()));
+    }
+    Ok(())
+}
+
+pub async fn delete_api_key(server: &str, password: &str, index: usize) -> Result<(), String> {
+    let url = format!("{}?index={}", build_url(server, API_KEYS_PATH), index);
     let resp = client()?
         .delete(&url)
         .bearer_auth(password)
