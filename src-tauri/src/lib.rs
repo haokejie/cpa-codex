@@ -55,6 +55,8 @@ pub fn run() {
             commands::set_autostart_enabled,
             commands::set_tray_enabled,
             commands::set_close_to_tray,
+            commands::set_auto_refresh_enabled,
+            commands::set_auto_refresh_interval_seconds,
             commands::login,
             commands::list_accounts,
             commands::delete_account,

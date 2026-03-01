@@ -35,7 +35,13 @@ export async function deleteAccount(): Promise<CommandResult> {
 
 // Config mocks
 export async function getConfig(): Promise<AppConfig> {
-  return { autostart_enabled: false, tray_enabled: true, close_to_tray: true };
+  return {
+    autostart_enabled: false,
+    tray_enabled: true,
+    close_to_tray: true,
+    auto_refresh_enabled: false,
+    auto_refresh_interval_seconds: 60,
+  };
 }
 
 export async function setAutostartEnabled(): Promise<CommandResult> {
@@ -47,6 +53,14 @@ export async function setTrayEnabled(): Promise<CommandResult> {
 }
 
 export async function setCloseToTray(): Promise<CommandResult> {
+  return { ok: true };
+}
+
+export async function setAutoRefreshEnabled(): Promise<CommandResult> {
+  return { ok: true };
+}
+
+export async function setAutoRefreshIntervalSeconds(): Promise<CommandResult> {
   return { ok: true };
 }
 

@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, computed, ref } from "vue";
+import { onMounted, computed, ref, watch } from "vue";
 import { useConfigStore } from "../stores/config";
 import { useAuthStore } from "../stores/auth";
 import { useCodexStore } from "../stores/codex";
+import { AUTO_REFRESH_MAX_SECONDS, AUTO_REFRESH_MIN_SECONDS, normalizeAutoRefreshIntervalSeconds } from "../utils/autoRefresh";
 import CodexAccountCard from "./CodexAccountCard.vue";
 import UsageStatsCard from "./UsageStatsCard.vue";
 import ServiceHealthCard from "./ServiceHealthCard.vue";
@@ -24,6 +25,8 @@ onMounted(() => {
 
 type TabKey = 'codex' | 'auth' | 'api-keys' | 'usage' | 'api-details' | 'settings';
 const activeTab = ref<TabKey>('auth');
+const autoRefreshSecondsInput = ref('');
+const autoRefreshError = ref('');
 
 const mainTabs: { key: TabKey; label: string }[] = [
   { key: 'auth', label: '认证' },
@@ -37,6 +40,32 @@ const accountLabel = computed(() => {
   if (!account) return "未知";
   return account.server;
 });
+
+watch(
+  () => configStore.config?.auto_refresh_interval_seconds,
+  (value) => {
+    if (value !== undefined && value !== null) {
+      autoRefreshSecondsInput.value = String(value);
+    }
+  },
+  { immediate: true },
+);
+
+async function saveAutoRefreshInterval() {
+  autoRefreshError.value = "";
+  const parsed = Number(autoRefreshSecondsInput.value);
+  if (!Number.isFinite(parsed)) {
+    autoRefreshError.value = "请输入有效的刷新间隔";
+    return;
+  }
+  const normalized = normalizeAutoRefreshIntervalSeconds(parsed);
+  autoRefreshSecondsInput.value = String(normalized);
+  try {
+    await configStore.updateAutoRefreshIntervalSeconds(normalized);
+  } catch {
+    // 错误由 configStore.error 展示
+  }
+}
 </script>
 
 <template>
@@ -214,6 +243,61 @@ const accountLabel = computed(() => {
                   {{ configStore.config?.close_to_tray ? "关闭" : "开启" }}
                 </button>
               </div>
+            </section>
+
+            <section class="card">
+              <div class="card-head">
+                <h2 class="card-title">自动刷新</h2>
+                <p class="card-desc">定时刷新认证文件列表</p>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-name">列表自动刷新</div>
+                  <div class="setting-value">
+                    当前：
+                    <span v-if="configStore.config" :class="configStore.config.auto_refresh_enabled ? 'status-on' : 'status-off'">
+                      {{ configStore.config.auto_refresh_enabled ? "已开启" : "已关闭" }}
+                    </span>
+                    <span v-else class="status-muted">加载中...</span>
+                  </div>
+                </div>
+                <button
+                  class="btn-action"
+                  :class="{ 'btn-action-on': configStore.config?.auto_refresh_enabled }"
+                  :disabled="configStore.working || !configStore.config"
+                  @click="configStore.toggleAutoRefresh"
+                >
+                  {{ configStore.config?.auto_refresh_enabled ? "关闭刷新" : "开启刷新" }}
+                </button>
+              </div>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-name">刷新间隔（秒）</div>
+                  <div class="setting-value">
+                    当前：
+                    <span v-if="configStore.config">{{ configStore.config.auto_refresh_interval_seconds }} 秒</span>
+                    <span v-else class="status-muted">加载中...</span>
+                  </div>
+                </div>
+                <div class="setting-actions">
+                  <input
+                    class="setting-input"
+                    v-model="autoRefreshSecondsInput"
+                    type="number"
+                    :min="AUTO_REFRESH_MIN_SECONDS"
+                    :max="AUTO_REFRESH_MAX_SECONDS"
+                    :disabled="configStore.working || !configStore.config"
+                  />
+                  <button
+                    class="btn-action"
+                    :disabled="configStore.working || !configStore.config"
+                    @click="saveAutoRefreshInterval"
+                  >
+                    保存
+                  </button>
+                </div>
+              </div>
+              <p v-if="autoRefreshError" class="error-msg">{{ autoRefreshError }}</p>
             </section>
 
             <p v-if="configStore.error" class="error-msg">{{ configStore.error }}</p>
@@ -464,6 +548,29 @@ const accountLabel = computed(() => {
 .setting-value {
   font-size: 12px;
   color: #71717A;
+}
+
+.setting-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.setting-input {
+  height: 32px;
+  width: 90px;
+  padding: 0 10px;
+  border: 1px solid #E4E4E7;
+  border-radius: 7px;
+  font-size: 13px;
+  color: #27272A;
+  font-family: inherit;
+  background: #FFFFFF;
+}
+
+.setting-input:disabled {
+  background: #F4F4F5;
+  color: #A1A1AA;
 }
 
 .status-on { color: #16A34A; font-weight: 500; }

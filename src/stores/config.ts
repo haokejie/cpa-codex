@@ -1,6 +1,13 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
-import { getConfig, setAutostartEnabled, setTrayEnabled, setCloseToTray } from "../api/config";
+import {
+  getConfig,
+  setAutostartEnabled,
+  setTrayEnabled,
+  setCloseToTray,
+  setAutoRefreshEnabled,
+  setAutoRefreshIntervalSeconds,
+} from "../api/config";
 import type { AppConfig } from "../types";
 
 export const useConfigStore = defineStore("config", () => {
@@ -59,5 +66,44 @@ export const useConfigStore = defineStore("config", () => {
     }
   }
 
-  return { config, error, working, refresh, toggleAutostart, toggleTray, toggleCloseToTray };
+  async function toggleAutoRefresh() {
+    if (!config.value) return;
+    working.value = true;
+    error.value = "";
+    try {
+      await setAutoRefreshEnabled(!config.value.auto_refresh_enabled);
+      await refresh();
+    } catch (e) {
+      error.value = String(e);
+    } finally {
+      working.value = false;
+    }
+  }
+
+  async function updateAutoRefreshIntervalSeconds(seconds: number) {
+    if (!config.value) return;
+    working.value = true;
+    error.value = "";
+    try {
+      await setAutoRefreshIntervalSeconds(seconds);
+      await refresh();
+    } catch (e) {
+      error.value = String(e);
+      throw e;
+    } finally {
+      working.value = false;
+    }
+  }
+
+  return {
+    config,
+    error,
+    working,
+    refresh,
+    toggleAutostart,
+    toggleTray,
+    toggleCloseToTray,
+    toggleAutoRefresh,
+    updateAutoRefreshIntervalSeconds,
+  };
 });

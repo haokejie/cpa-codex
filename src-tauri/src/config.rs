@@ -8,6 +8,10 @@ fn default_true() -> bool {
     true
 }
 
+fn default_auto_refresh_interval_seconds() -> u64 {
+    60
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AppConfig {
     pub autostart_enabled: bool,
@@ -15,6 +19,10 @@ pub struct AppConfig {
     pub tray_enabled: bool,
     #[serde(default = "default_true")]
     pub close_to_tray: bool,
+    #[serde(default)]
+    pub auto_refresh_enabled: bool,
+    #[serde(default = "default_auto_refresh_interval_seconds")]
+    pub auto_refresh_interval_seconds: u64,
 }
 
 impl Default for AppConfig {
@@ -23,6 +31,8 @@ impl Default for AppConfig {
             autostart_enabled: false,
             tray_enabled: true,
             close_to_tray: true,
+            auto_refresh_enabled: false,
+            auto_refresh_interval_seconds: default_auto_refresh_interval_seconds(),
         }
     }
 }
@@ -82,6 +92,20 @@ impl ConfigStore {
     pub fn set_close_to_tray(&self, enabled: bool) -> Result<(), String> {
         let mut data = self.data.lock().unwrap_or_else(|e| e.into_inner());
         data.close_to_tray = enabled;
+        drop(data);
+        self.persist()
+    }
+
+    pub fn set_auto_refresh_enabled(&self, enabled: bool) -> Result<(), String> {
+        let mut data = self.data.lock().unwrap_or_else(|e| e.into_inner());
+        data.auto_refresh_enabled = enabled;
+        drop(data);
+        self.persist()
+    }
+
+    pub fn set_auto_refresh_interval_seconds(&self, seconds: u64) -> Result<(), String> {
+        let mut data = self.data.lock().unwrap_or_else(|e| e.into_inner());
+        data.auto_refresh_interval_seconds = seconds;
         drop(data);
         self.persist()
     }

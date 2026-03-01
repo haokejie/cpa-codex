@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { onMounted, ref, computed, watch } from "vue";
+import { onMounted, onUnmounted, ref, computed, watch } from "vue";
 import { useAuthFilesStore } from "../stores/authFiles";
+import { useConfigStore } from "../stores/config";
 import type { AuthFileItem } from "../types";
+import { normalizeAutoRefreshIntervalSeconds } from "../utils/autoRefresh";
 import ConfirmDialog from "./ConfirmDialog.vue";
 
 const store = useAuthFilesStore();
+const configStore = useConfigStore();
 const currentPage = ref(1);
 const pageSize = ref(5);
 const showConfirm = ref(false);
@@ -43,6 +46,36 @@ function doJump() {
 }
 
 onMounted(() => store.fetchFiles());
+
+let refreshTimer: number | null = null;
+
+function clearAutoRefresh() {
+  if (refreshTimer !== null) {
+    window.clearInterval(refreshTimer);
+    refreshTimer = null;
+  }
+}
+
+function setupAutoRefresh() {
+  clearAutoRefresh();
+  const config = configStore.config;
+  if (!config?.auto_refresh_enabled) return;
+  const seconds = normalizeAutoRefreshIntervalSeconds(config.auto_refresh_interval_seconds);
+  refreshTimer = window.setInterval(() => {
+    if (store.loading || store.uploading) return;
+    store.fetchFiles();
+  }, seconds * 1000);
+}
+
+watch(
+  () => [configStore.config?.auto_refresh_enabled, configStore.config?.auto_refresh_interval_seconds],
+  setupAutoRefresh,
+  { immediate: true },
+);
+
+onUnmounted(() => {
+  clearAutoRefresh();
+});
 
 function formatFileSize(size: number) {
   if (size < 1024) return `${size} B`;

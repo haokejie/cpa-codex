@@ -3,6 +3,8 @@ export type AppConfig = {
   autostart_enabled: boolean;
   tray_enabled: boolean;
   close_to_tray: boolean;
+  auto_refresh_enabled: boolean;
+  auto_refresh_interval_seconds: number;
 };
 
 // 与 src-tauri/src/db.rs Account 对应

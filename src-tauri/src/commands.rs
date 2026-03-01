@@ -156,6 +156,32 @@ pub async fn set_close_to_tray(
     Ok(CommandResult { ok: true })
 }
 
+#[tauri::command]
+pub async fn set_auto_refresh_enabled(
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<CommandResult, String> {
+    state.config.set_auto_refresh_enabled(enabled)?;
+    Ok(CommandResult { ok: true })
+}
+
+#[tauri::command]
+pub async fn set_auto_refresh_interval_seconds(
+    state: State<'_, AppState>,
+    seconds: u64,
+) -> Result<CommandResult, String> {
+    let min_seconds: u64 = 10;
+    let max_seconds: u64 = 3600;
+    if seconds < min_seconds {
+        return Err(format!("刷新间隔不能小于 {min_seconds} 秒"));
+    }
+    if seconds > max_seconds {
+        return Err(format!("刷新间隔不能超过 {max_seconds} 秒"));
+    }
+    state.config.set_auto_refresh_interval_seconds(seconds)?;
+    Ok(CommandResult { ok: true })
+}
+
 fn build_account_key(server: &str) -> String {
     server.to_string()
 }

@@ -27,3 +27,17 @@ export async function setCloseToTray(
   if (!isTauri()) return mock.setCloseToTray();
   return (await getInvoke())("set_close_to_tray", { enabled });
 }
+
+export async function setAutoRefreshEnabled(
+  enabled: boolean
+): Promise<CommandResult> {
+  if (!isTauri()) return mock.setAutoRefreshEnabled();
+  return (await getInvoke())("set_auto_refresh_enabled", { enabled });
+}
+
+export async function setAutoRefreshIntervalSeconds(
+  seconds: number
+): Promise<CommandResult> {
+  if (!isTauri()) return mock.setAutoRefreshIntervalSeconds();
+  return (await getInvoke())("set_auto_refresh_interval_seconds", { seconds });
+}
