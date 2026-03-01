@@ -94,7 +94,51 @@ export async function getCodexQuota(): Promise<Record<string, unknown>> {
 }
 
 export async function getUsage(): Promise<Record<string, unknown>> {
-  return { totalRequests: 128, successCount: 120, failCount: 8 };
+  const now = Date.now();
+  const details = Array.from({ length: 60 }).map((_, idx) => {
+    const minuteOffset = 59 - idx;
+    const timestamp = new Date(now - minuteOffset * 60 * 1000 + 12 * 1000).toISOString();
+    const inputTokens = 120 + idx * 3;
+    const outputTokens = 80 + idx * 2;
+    const cachedTokens = idx % 4 === 0 ? 24 : 8;
+    const reasoningTokens = idx % 9 === 0 ? 16 : 0;
+    return {
+      timestamp,
+      source: "codex-demo",
+      auth_index: idx % 3,
+      tokens: {
+        input_tokens: inputTokens,
+        output_tokens: outputTokens,
+        cached_tokens: cachedTokens,
+        reasoning_tokens: reasoningTokens,
+      },
+      failed: idx % 11 === 0,
+    };
+  });
+
+  const totalRequests = details.length;
+  const failCount = details.filter((detail) => detail.failed).length;
+  const successCount = totalRequests - failCount;
+  const totalTokens = details.reduce((sum, detail) => {
+    const tokens = detail.tokens;
+    return sum + tokens.input_tokens + tokens.output_tokens + tokens.cached_tokens + tokens.reasoning_tokens;
+  }, 0);
+
+  return {
+    totalRequests,
+    successCount,
+    failCount,
+    total_tokens: totalTokens,
+    apis: {
+      codex: {
+        models: {
+          "gpt-4o": {
+            details,
+          },
+        },
+      },
+    },
+  };
 }
 
 // AuthFiles mocks

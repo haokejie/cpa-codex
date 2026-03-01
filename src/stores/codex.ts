@@ -1,7 +1,25 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
-import type { CodexConfig, CodexQuotaState, CodexQuotaWindow, UsageStats } from "../types";
+import type {
+  CodexConfig,
+  CodexQuotaState,
+  CodexQuotaWindow,
+  ServiceHealthData,
+  UsageRates,
+  UsageSparklineSeries,
+  UsageStats,
+  UsageTokens,
+} from "../types";
 import { getCodexConfigs, saveCodexConfigs, deleteCodexConfig, getCodexQuota, getUsage } from "../api/codex";
+import {
+  buildMinuteSeries,
+  calculateRecentRates,
+  calculateServiceHealthData,
+  collectUsageDetails,
+  summarizeTokens,
+  summarizeUsage,
+  unwrapUsagePayload,
+} from "../utils/usage";
 
 function parseWindow(w: Record<string, unknown>): CodexQuotaWindow {
   return {
@@ -32,7 +50,10 @@ export const useCodexStore = defineStore("codex", () => {
   const configs = ref<CodexConfig[]>([]);
   const quotas = ref<Record<string, CodexQuotaState>>({});
   const usage = ref<UsageStats>({ totalRequests: 0, successCount: 0, failCount: 0 });
+  const usageRaw = ref<unknown>(null);
+  const usageUpdatedAt = ref(0);
   const loading = ref(false);
+  const usageLoading = ref(false);
   const fetchError = ref<string | null>(null);
   const refreshingQuota = ref(false);
   const selected = ref<Set<string>>(new Set());
@@ -43,20 +64,31 @@ export const useCodexStore = defineStore("codex", () => {
     if (!usage.value.totalRequests) return "0";
     return ((usage.value.successCount / usage.value.totalRequests) * 100).toFixed(1);
   });
+  const usageTokens = computed<UsageTokens>(() => summarizeTokens(usageRaw.value));
+  const usageRates = computed<UsageRates>(() => calculateRecentRates(usageRaw.value, 30, usageUpdatedAt.value));
+  const usageSeries = computed<UsageSparklineSeries>(() => buildMinuteSeries(usageRaw.value, 60, usageUpdatedAt.value));
+  const serviceHealth = computed<ServiceHealthData>(() => calculateServiceHealthData(collectUsageDetails(usageRaw.value)));
+
+  async function refreshUsage() {
+    usageLoading.value = true;
+    try {
+      const raw = await getUsage();
+      const rawUsage = unwrapUsagePayload(raw);
+      usageRaw.value = rawUsage;
+      usageUpdatedAt.value = Date.now();
+      usage.value = summarizeUsage(rawUsage);
+    } catch { /* usage 查询失败不阻塞 */ }
+    finally {
+      usageLoading.value = false;
+    }
+  }
 
   async function fetchConfigs() {
     loading.value = true;
     fetchError.value = null;
     try {
       configs.value = await getCodexConfigs();
-      try {
-        const raw = await getUsage();
-        usage.value = {
-          totalRequests: Number(raw.totalRequests || 0),
-          successCount: Number(raw.successCount || 0),
-          failCount: Number(raw.failCount || 0),
-        };
-      } catch { /* usage 查询失败不阻塞 */ }
+      await refreshUsage();
     } catch (e) {
       fetchError.value = String(e);
     } finally {
@@ -163,9 +195,10 @@ export const useCodexStore = defineStore("codex", () => {
   }
 
   return {
-    configs, quotas, usage, loading, fetchError, refreshingQuota,
+    configs, quotas, usage, usageRaw, usageUpdatedAt, usageTokens, usageRates, usageSeries, serviceHealth,
+    loading, usageLoading, fetchError, refreshingQuota,
     selected, selectedCount, allSelected, successRate,
-    fetchConfigs, refreshQuotas, refreshSingleQuota,
+    fetchConfigs, refreshUsage, refreshQuotas, refreshSingleQuota,
     toggleSelect, toggleSelectAll, clearSelection,
     setTopPriority, batchSetTopPriority, batchDisable,
     deleteConfig, batchDelete,

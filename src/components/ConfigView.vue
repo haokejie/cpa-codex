@@ -5,6 +5,9 @@ import { useAuthStore } from "../stores/auth";
 import { useCodexStore } from "../stores/codex";
 import CodexAccountCard from "./CodexAccountCard.vue";
 import UsageStatsCard from "./UsageStatsCard.vue";
+import ServiceHealthCard from "./ServiceHealthCard.vue";
+import CredentialStatsCard from "./CredentialStatsCard.vue";
+import RequestEventsDetailsCard from "./RequestEventsDetailsCard.vue";
 import AuthFilesCard from "./AuthFilesCard.vue";
 
 const configStore = useConfigStore();
@@ -106,7 +109,12 @@ const accountLabel = computed(() => {
           <AuthFilesCard v-if="activeTab === 'auth'" />
 
           <!-- 使用统计 -->
-          <UsageStatsCard v-if="activeTab === 'usage'" />
+          <template v-if="activeTab === 'usage'">
+            <UsageStatsCard />
+            <ServiceHealthCard />
+            <CredentialStatsCard />
+            <RequestEventsDetailsCard />
+          </template>
 
           <!-- 设置 -->
           <template v-if="activeTab === 'settings'">

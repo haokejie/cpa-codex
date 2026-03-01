@@ -66,6 +66,50 @@ export type UsageStats = {
   failCount: number;
 };
 
+export type UsageTokens = {
+  totalTokens: number;
+  cachedTokens: number;
+  reasoningTokens: number;
+  hasData: boolean;
+  hasBreakdown: boolean;
+};
+
+export type UsageRates = {
+  rpm: number;
+  tpm: number;
+  windowMinutes: number;
+  requestCount: number;
+  tokenCount: number;
+  hasData: boolean;
+};
+
+export type UsageSparklineSeries = {
+  labels: string[];
+  requests: number[];
+  tokens: number[];
+  hasData: boolean;
+};
+
+export type StatusBlockState = 'idle' | 'success' | 'failure' | 'mixed';
+
+export type StatusBlockDetail = {
+  success: number;
+  failure: number;
+  rate: number;
+  startTime: number;
+  endTime: number;
+};
+
+export type ServiceHealthData = {
+  blocks: StatusBlockState[];
+  blockDetails: StatusBlockDetail[];
+  successRate: number;
+  totalSuccess: number;
+  totalFailure: number;
+  rows: number;
+  cols: number;
+};
+
 // 通用命令返回值
 export type CommandResult = { ok: boolean };
 
@@ -74,6 +118,8 @@ export type AuthFileItem = {
   name: string;
   type?: string;
   provider?: string;
+  authIndex?: string | number;
+  auth_index?: string | number;
   size?: number;
   disabled?: boolean;
   unavailable?: boolean;
