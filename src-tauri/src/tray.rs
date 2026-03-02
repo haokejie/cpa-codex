@@ -17,6 +17,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             "show" => {
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
+                    let _ = window.unminimize();
                     let _ = window.set_focus();
                 }
             }
@@ -29,6 +30,7 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
             if let TrayIconEvent::Click { .. } = event {
                 if let Some(window) = tray.app_handle().get_webview_window("main") {
                     let _ = window.show();
+                    let _ = window.unminimize();
                     let _ = window.set_focus();
                 }
             }

@@ -13,6 +13,8 @@ use tauri::Manager;
 use tauri::WindowEvent;
 use tauri_plugin_autostart::MacosLauncher;
 
+#[cfg(target_os = "macos")]
+use tauri::RunEvent;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -80,6 +82,16 @@ pub fn run() {
             commands::delete_auth_file,
             commands::delete_all_auth_files
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application")
+        .run(|app_handle, event| {
+            #[cfg(target_os = "macos")]
+            if let RunEvent::Reopen { .. } = event {
+                if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = window.show();
+                    let _ = window.unminimize();
+                    let _ = window.set_focus();
+                }
+            }
+        });
 }
