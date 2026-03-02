@@ -585,7 +585,6 @@ function toggleRow(id: string) {
 }
 
 .cell-tokens {
-  display: flex;
   flex-wrap: wrap;
   gap: 8px 12px;
   color: var(--zinc-600);
@@ -638,7 +637,15 @@ function toggleRow(id: string) {
 .row-summary {
   cursor: pointer;
   transition: background 150ms ease;
+  height: 47px;
 }
+
+.row-summary > td {
+  vertical-align: middle;
+  box-sizing: border-box;
+}
+
+
 
 .row-summary:hover {
   background: var(--zinc-50);
