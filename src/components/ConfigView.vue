@@ -12,6 +12,7 @@ import RequestEventsDetailsCard from "./RequestEventsDetailsCard.vue";
 import AuthFilesCard from "./AuthFilesCard.vue";
 import ApiDetailsCard from "./ApiDetailsCard.vue";
 import ApiKeysCard from "./ApiKeysCard.vue";
+import BaseCard from "./BaseCard.vue";
 
 const configStore = useConfigStore();
 const authStore = useAuthStore();
@@ -169,11 +170,7 @@ async function saveAutoRefreshInterval() {
 
           <!-- 设置 -->
           <template v-if="activeTab === 'settings'">
-            <section class="card">
-              <div class="card-head">
-                <h2 class="card-title">启动设置</h2>
-                <p class="card-desc">控制应用是否在系统启动时自动运行</p>
-              </div>
+            <BaseCard title="启动设置" description="控制应用是否在系统启动时自动运行" headerGap="lg">
               <div class="setting-row">
                 <div class="setting-info">
                   <div class="setting-name">开机自启动</div>
@@ -194,13 +191,9 @@ async function saveAutoRefreshInterval() {
                   {{ configStore.config?.autostart_enabled ? "关闭自启动" : "开启自启动" }}
                 </button>
               </div>
-            </section>
+            </BaseCard>
 
-            <section class="card">
-              <div class="card-head">
-                <h2 class="card-title">托盘与后台运行</h2>
-                <p class="card-desc">控制系统托盘图标和关闭窗口时的行为</p>
-              </div>
+            <BaseCard title="托盘与后台运行" description="控制系统托盘图标和关闭窗口时的行为" headerGap="lg">
               <div class="setting-row">
                 <div class="setting-info">
                   <div class="setting-name">托盘图标</div>
@@ -243,13 +236,31 @@ async function saveAutoRefreshInterval() {
                   {{ configStore.config?.close_to_tray ? "关闭" : "开启" }}
                 </button>
               </div>
-            </section>
-
-            <section class="card">
-              <div class="card-head">
-                <h2 class="card-title">自动刷新</h2>
-                <p class="card-desc">定时刷新认证文件列表</p>
+              <div class="setting-row">
+                <div class="setting-info">
+                  <div class="setting-name">最小化时保留 Dock 图标（仅 macOS）</div>
+                  <div class="setting-value">
+                    <template v-if="configStore.config?.tray_enabled">
+                      当前：
+                      <span :class="configStore.config.dock_visible_on_minimize ? 'status-on' : 'status-off'">
+                        {{ configStore.config.dock_visible_on_minimize ? "已开启" : "已关闭" }}
+                      </span>
+                    </template>
+                    <span v-else class="status-muted">需开启托盘图标</span>
+                  </div>
+                </div>
+                <button
+                  class="btn-action"
+                  :class="{ 'btn-action-on': configStore.config?.dock_visible_on_minimize }"
+                  :disabled="configStore.working || !configStore.config || !configStore.config.tray_enabled"
+                  @click="configStore.toggleDockVisibleOnMinimize"
+                >
+                  {{ configStore.config?.dock_visible_on_minimize ? "关闭" : "开启" }}
+                </button>
               </div>
+            </BaseCard>
+
+            <BaseCard title="自动刷新" description="定时刷新认证文件列表" headerGap="lg">
               <div class="setting-row">
                 <div class="setting-info">
                   <div class="setting-name">列表自动刷新</div>
@@ -298,7 +309,7 @@ async function saveAutoRefreshInterval() {
                 </div>
               </div>
               <p v-if="autoRefreshError" class="error-msg">{{ autoRefreshError }}</p>
-            </section>
+            </BaseCard>
 
             <p v-if="configStore.error" class="error-msg">{{ configStore.error }}</p>
           </template>
@@ -491,37 +502,13 @@ async function saveAutoRefreshInterval() {
 }
 
 .content-inner {
-  max-width: 760px;
+  max-width: 960px;
   width: 100%;
   margin: 0 auto;
   padding: 28px 32px;
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-/* 设置卡片 */
-.card {
-  background: #FFFFFF;
-  border: 1px solid #E4E4E7;
-  border-radius: 12px;
-  padding: 20px 24px;
-}
-
-.card-head {
-  margin-bottom: 20px;
-}
-
-.card-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: #18181B;
-  margin-bottom: 4px;
-}
-
-.card-desc {
-  font-size: 12px;
-  color: #71717A;
 }
 
 .setting-row {

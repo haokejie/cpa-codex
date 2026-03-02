@@ -178,6 +178,8 @@ type UsageDetail = {
   __modelName?: string;
 };
 
+const usageDetailsCache = new WeakMap<RecordValue, UsageDetail[]>();
+
 const readTokenNumber = (obj: RecordValue, key: string): number | undefined => {
   const value = readNumber(obj, key);
   if (value === undefined) return undefined;
@@ -332,6 +334,8 @@ export function buildCandidateUsageSourceIds(input: { apiKey?: string; prefix?: 
 export function collectUsageDetails(raw: unknown): UsageDetail[] {
   const usage = isRecord(raw) ? raw : null;
   if (!usage) return [];
+  const cached = usageDetailsCache.get(usage);
+  if (cached) return cached;
 
   const apis = isRecord(usage.apis) ? usage.apis : null;
   const apiList = apis ? Object.values(apis) : Array.isArray(usage.apis) ? usage.apis : null;
@@ -384,6 +388,7 @@ export function collectUsageDetails(raw: unknown): UsageDetail[] {
     });
   });
 
+  usageDetailsCache.set(usage, details);
   return details;
 }
 
@@ -408,34 +413,7 @@ export function extractTotalTokens(detail: unknown): number {
   return clampNonNegative(inputTokens + outputTokens + reasoningTokens + cachedTokens);
 }
 
-export function summarizeTokens(raw: unknown): UsageTokens {
-  if (!isRecord(raw)) {
-    return { totalTokens: 0, cachedTokens: 0, reasoningTokens: 0, hasData: false, hasBreakdown: false };
-  }
-
-  const totalTokens =
-    readTokenNumber(raw, "total_tokens") ??
-    readTokenNumber(raw, "totalTokens");
-  const cachedTokens =
-    readTokenNumber(raw, "cached_tokens") ??
-    readTokenNumber(raw, "cache_tokens") ??
-    readTokenNumber(raw, "cachedTokens");
-  const reasoningTokens =
-    readTokenNumber(raw, "reasoning_tokens") ??
-    readTokenNumber(raw, "reasoningTokens");
-
-  const hasBreakdown = cachedTokens !== undefined || reasoningTokens !== undefined;
-  if (totalTokens !== undefined) {
-    return {
-      totalTokens,
-      cachedTokens: cachedTokens ?? 0,
-      reasoningTokens: reasoningTokens ?? 0,
-      hasData: true,
-      hasBreakdown,
-    };
-  }
-
-  const details = collectUsageDetails(raw);
+const summarizeTokensFromDetailList = (details: UsageDetail[]): UsageTokens => {
   if (!details.length) {
     return { totalTokens: 0, cachedTokens: 0, reasoningTokens: 0, hasData: false, hasBreakdown: false };
   }
@@ -472,8 +450,43 @@ export function summarizeTokens(raw: unknown): UsageTokens {
   };
 }
 
-export function calculateRecentRates(raw: unknown, windowMinutes = 30, nowMs?: number): UsageRates {
-  const details = collectUsageDetails(raw);
+export function summarizeTokensFromDetails(raw: unknown, details: UsageDetail[]): UsageTokens {
+  if (isRecord(raw)) {
+    const totalTokens =
+      readTokenNumber(raw, "total_tokens") ??
+      readTokenNumber(raw, "totalTokens");
+    const cachedTokens =
+      readTokenNumber(raw, "cached_tokens") ??
+      readTokenNumber(raw, "cache_tokens") ??
+      readTokenNumber(raw, "cachedTokens");
+    const reasoningTokens =
+      readTokenNumber(raw, "reasoning_tokens") ??
+      readTokenNumber(raw, "reasoningTokens");
+
+    const hasBreakdown = cachedTokens !== undefined || reasoningTokens !== undefined;
+    if (totalTokens !== undefined) {
+      return {
+        totalTokens,
+        cachedTokens: cachedTokens ?? 0,
+        reasoningTokens: reasoningTokens ?? 0,
+        hasData: true,
+        hasBreakdown,
+      };
+    }
+  }
+
+  return summarizeTokensFromDetailList(details);
+}
+
+export function summarizeTokens(raw: unknown): UsageTokens {
+  return summarizeTokensFromDetails(raw, collectUsageDetails(raw));
+}
+
+export function calculateRecentRatesFromDetails(
+  details: UsageDetail[],
+  windowMinutes = 30,
+  nowMs?: number,
+): UsageRates {
   const effectiveWindow = Number.isFinite(windowMinutes) && windowMinutes > 0 ? windowMinutes : 30;
   if (!details.length) {
     return { rpm: 0, tpm: 0, windowMinutes: effectiveWindow, requestCount: 0, tokenCount: 0, hasData: false };
@@ -502,6 +515,10 @@ export function calculateRecentRates(raw: unknown, windowMinutes = 30, nowMs?: n
     tokenCount,
     hasData: true,
   };
+}
+
+export function calculateRecentRates(raw: unknown, windowMinutes = 30, nowMs?: number): UsageRates {
+  return calculateRecentRatesFromDetails(collectUsageDetails(raw), windowMinutes, nowMs);
 }
 
 export function buildHourlySeries(raw: unknown, hours = 24, nowMs?: number): UsageSparklineSeries {
@@ -543,7 +560,14 @@ export function buildHourlySeries(raw: unknown, hours = 24, nowMs?: number): Usa
 }
 
 export function buildMinuteSeries(raw: unknown, minutes = 60, nowMs?: number): UsageSparklineSeries {
-  const details = collectUsageDetails(raw);
+  return buildMinuteSeriesFromDetails(collectUsageDetails(raw), minutes, nowMs);
+}
+
+export function buildMinuteSeriesFromDetails(
+  details: UsageDetail[],
+  minutes = 60,
+  nowMs?: number,
+): UsageSparklineSeries {
   const windowMinutes = Number.isFinite(minutes) && minutes > 0 ? Math.floor(minutes) : 60;
   const now = Number.isFinite(nowMs) && (nowMs as number) > 0 ? (nowMs as number) : Date.now();
   const minuteMs = 60 * 1000;

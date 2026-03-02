@@ -4,6 +4,7 @@ import { storeToRefs } from "pinia";
 import { listAuthFiles } from "../api/authFiles";
 import { useCodexStore } from "../stores/codex";
 import type { AuthFileItem } from "../types";
+import BaseCard from "./BaseCard.vue";
 import {
   buildCandidateUsageSourceIds,
   collectUsageDetails,
@@ -192,13 +193,7 @@ const isLoading = computed(() => usageLoading.value);
 </script>
 
 <template>
-  <section class="card">
-    <div class="card-head">
-      <div>
-        <h2 class="card-title">凭证统计</h2>
-        <p class="card-desc">按密钥/前缀聚合成功率</p>
-      </div>
-    </div>
+  <BaseCard title="凭证统计" description="按密钥/前缀聚合成功率">
 
     <div v-if="isLoading && rows.length === 0" class="empty-state keep-height">
       <p class="empty-text">加载中...</p>
@@ -241,33 +236,10 @@ const isLoading = computed(() => usageLoading.value);
         </tbody>
       </table>
     </div>
-  </section>
+  </BaseCard>
 </template>
 
 <style scoped>
-.card {
-  background: #fff;
-  border: 1px solid var(--zinc-200);
-  border-radius: 12px;
-  padding: 20px 24px;
-}
-
-.card-head {
-  margin-bottom: 16px;
-}
-
-.card-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--zinc-900);
-  margin-bottom: 4px;
-}
-
-.card-desc {
-  font-size: 12px;
-  color: var(--zinc-500);
-}
-
 .empty-state {
   padding: 16px 0;
   text-align: center;

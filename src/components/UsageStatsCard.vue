@@ -11,6 +11,7 @@ import {
 } from "chart.js";
 import { useCodexStore } from "../stores/codex";
 import { formatCompactNumber, formatPerMinuteValue } from "../utils/usage";
+import BaseCard from "./BaseCard.vue";
 
 const store = useCodexStore();
 
@@ -166,17 +167,13 @@ const tpmMetaText = computed(() =>
 </script>
 
 <template>
-  <section class="card">
-    <div class="card-head">
-      <div class="head-left">
-        <h2 class="card-title">使用统计</h2>
-        <p class="card-desc">请求成功率与密钥使用情况</p>
-      </div>
+  <BaseCard title="使用统计" description="请求成功率与密钥使用情况" headerGap="lg" headerAlign="center">
+    <template #actions>
       <button class="btn-ghost btn-sm" @click="store.refreshUsage" :disabled="store.usageLoading">
         <span v-if="store.usageLoading" class="btn-spinner" aria-hidden="true"></span>
         {{ store.usageLoading ? '刷新中...' : '刷新' }}
       </button>
-    </div>
+    </template>
     <div class="stats-grid">
       <div class="stat-card stat-requests">
         <div class="stat-head">
@@ -239,28 +236,10 @@ const tpmMetaText = computed(() =>
         </div>
       </div>
     </div>
-  </section>
+  </BaseCard>
 </template>
 
 <style scoped>
-.card {
-  background: #fff;
-  border: 1px solid var(--zinc-200);
-  border-radius: 12px;
-  padding: 20px 24px;
-}
-.card-head { margin-bottom: 20px; }
-.card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-.head-left {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
 .btn-ghost {
   display: inline-flex;
   align-items: center;
@@ -297,16 +276,6 @@ const tpmMetaText = computed(() =>
 @keyframes usage-spin {
   from { transform: rotate(0deg); }
   to { transform: rotate(360deg); }
-}
-.card-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--zinc-900);
-  margin-bottom: 4px;
-}
-.card-desc {
-  font-size: 12px;
-  color: var(--zinc-500);
 }
 .stats-grid {
   display: grid;

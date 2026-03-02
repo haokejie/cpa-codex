@@ -4,8 +4,11 @@ use crate::crypto;
 use crate::remote;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
+use tauri::Manager;
 use tauri::State;
 use tauri_plugin_autostart::ManagerExt;
+#[cfg(target_os = "macos")]
+use tauri::ActivationPolicy;
 
 #[derive(Debug, Deserialize)]
 pub struct LoginPayload {
@@ -153,6 +156,34 @@ pub async fn set_close_to_tray(
     enabled: bool,
 ) -> Result<CommandResult, String> {
     state.config.set_close_to_tray(enabled)?;
+    Ok(CommandResult { ok: true })
+}
+
+#[tauri::command]
+pub async fn set_dock_visible_on_minimize(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    enabled: bool,
+) -> Result<CommandResult, String> {
+    state.config.set_dock_visible_on_minimize(enabled)?;
+    #[cfg(target_os = "macos")]
+    {
+        let dock_visible = if enabled {
+            true
+        } else if let Some(window) = app.get_webview_window("main") {
+            let minimized = window.is_minimized().unwrap_or(false);
+            let visible = window.is_visible().unwrap_or(true);
+            visible && !minimized
+        } else {
+            true
+        };
+        let policy = if dock_visible {
+            ActivationPolicy::Regular
+        } else {
+            ActivationPolicy::Accessory
+        };
+        let _ = app.set_activation_policy(policy);
+    }
     Ok(CommandResult { ok: true })
 }
 

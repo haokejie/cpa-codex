@@ -3,6 +3,7 @@ export type AppConfig = {
   autostart_enabled: boolean;
   tray_enabled: boolean;
   close_to_tray: boolean;
+  dock_visible_on_minimize: boolean;
   auto_refresh_enabled: boolean;
   auto_refresh_interval_seconds: number;
 };

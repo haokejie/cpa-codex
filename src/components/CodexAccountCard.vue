@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useCodexStore } from "../stores/codex";
 import type { CodexConfig, CodexQuotaState } from "../types";
+import BaseCard from "./BaseCard.vue";
 
 const emit = defineEmits<{ edit: [cfg: CodexConfig]; delete: [cfg: CodexConfig]; batchDelete: [] }>();
 const store = useCodexStore();
@@ -87,19 +88,19 @@ function isQuotaLoading(key: string) {
 </script>
 
 <template>
-  <section class="card">
-    <div class="card-head">
-      <div class="card-head-left">
-        <h2 class="card-title">Codex 账号</h2>
+  <BaseCard headerAlign="center">
+    <template #title>
+      <h2 class="card-title">
+        Codex 账号
         <span class="card-count" v-if="store.configs.length">({{ store.configs.length }})</span>
-      </div>
-      <div class="card-head-actions">
-        <button class="btn-ghost" :disabled="store.refreshingQuota" @click="store.refreshQuotas">
-          {{ store.refreshingQuota ? "刷新中..." : "刷新额度" }}
-        </button>
-        <button class="btn-primary-sm">+ 添加</button>
-      </div>
-    </div>
+      </h2>
+    </template>
+    <template #actions>
+      <button class="btn-ghost" :disabled="store.refreshingQuota" @click="store.refreshQuotas">
+        {{ store.refreshingQuota ? "刷新中..." : "刷新额度" }}
+      </button>
+      <button class="btn-primary-sm">+ 添加</button>
+    </template>
 
     <!-- 错误提示 -->
     <div v-if="store.fetchError" class="error-banner">
@@ -193,44 +194,14 @@ function isQuotaLoading(key: string) {
         <button class="btn-ghost btn-sm btn-ghost-danger" @click="emit('batchDelete')">批量移除</button>
       </div>
     </div>
-  </section>
+  </BaseCard>
 </template>
 
 <style scoped>
-.card {
-  background: #fff;
-  border: 1px solid var(--zinc-200);
-  border-radius: 12px;
-  padding: 20px 24px;
-}
-
-.card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 16px;
-}
-
-.card-head-left {
-  display: flex;
-  align-items: baseline;
-  gap: 6px;
-}
-
-.card-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--zinc-900);
-}
-
 .card-count {
   font-size: 12px;
   color: var(--zinc-500);
-}
-
-.card-head-actions {
-  display: flex;
-  gap: 8px;
+  margin-left: 6px;
 }
 
 /* 按钮 */

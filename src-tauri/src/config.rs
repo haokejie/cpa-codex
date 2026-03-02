@@ -19,6 +19,8 @@ pub struct AppConfig {
     pub tray_enabled: bool,
     #[serde(default = "default_true")]
     pub close_to_tray: bool,
+    #[serde(default = "default_true")]
+    pub dock_visible_on_minimize: bool,
     #[serde(default)]
     pub auto_refresh_enabled: bool,
     #[serde(default = "default_auto_refresh_interval_seconds")]
@@ -31,6 +33,7 @@ impl Default for AppConfig {
             autostart_enabled: false,
             tray_enabled: true,
             close_to_tray: true,
+            dock_visible_on_minimize: true,
             auto_refresh_enabled: false,
             auto_refresh_interval_seconds: default_auto_refresh_interval_seconds(),
         }
@@ -92,6 +95,13 @@ impl ConfigStore {
     pub fn set_close_to_tray(&self, enabled: bool) -> Result<(), String> {
         let mut data = self.data.lock().unwrap_or_else(|e| e.into_inner());
         data.close_to_tray = enabled;
+        drop(data);
+        self.persist()
+    }
+
+    pub fn set_dock_visible_on_minimize(&self, enabled: bool) -> Result<(), String> {
+        let mut data = self.data.lock().unwrap_or_else(|e| e.into_inner());
+        data.dock_visible_on_minimize = enabled;
         drop(data);
         self.persist()
     }

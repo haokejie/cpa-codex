@@ -28,6 +28,13 @@ export async function setCloseToTray(
   return (await getInvoke())("set_close_to_tray", { enabled });
 }
 
+export async function setDockVisibleOnMinimize(
+  enabled: boolean
+): Promise<CommandResult> {
+  if (!isTauri()) return mock.setDockVisibleOnMinimize();
+  return (await getInvoke())("set_dock_visible_on_minimize", { enabled });
+}
+
 export async function setAutoRefreshEnabled(
   enabled: boolean
 ): Promise<CommandResult> {

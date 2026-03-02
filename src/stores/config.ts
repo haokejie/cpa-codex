@@ -5,6 +5,7 @@ import {
   setAutostartEnabled,
   setTrayEnabled,
   setCloseToTray,
+  setDockVisibleOnMinimize,
   setAutoRefreshEnabled,
   setAutoRefreshIntervalSeconds,
 } from "../api/config";
@@ -66,6 +67,20 @@ export const useConfigStore = defineStore("config", () => {
     }
   }
 
+  async function toggleDockVisibleOnMinimize() {
+    if (!config.value) return;
+    working.value = true;
+    error.value = "";
+    try {
+      await setDockVisibleOnMinimize(!config.value.dock_visible_on_minimize);
+      await refresh();
+    } catch (e) {
+      error.value = String(e);
+    } finally {
+      working.value = false;
+    }
+  }
+
   async function toggleAutoRefresh() {
     if (!config.value) return;
     working.value = true;
@@ -103,6 +118,7 @@ export const useConfigStore = defineStore("config", () => {
     toggleAutostart,
     toggleTray,
     toggleCloseToTray,
+    toggleDockVisibleOnMinimize,
     toggleAutoRefresh,
     updateAutoRefreshIntervalSeconds,
   };

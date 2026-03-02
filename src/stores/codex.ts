@@ -12,11 +12,11 @@ import type {
 } from "../types";
 import { getCodexConfigs, saveCodexConfigs, deleteCodexConfig, getCodexQuota, getUsage } from "../api/codex";
 import {
-  buildMinuteSeries,
-  calculateRecentRates,
+  buildMinuteSeriesFromDetails,
+  calculateRecentRatesFromDetails,
   calculateServiceHealthData,
   collectUsageDetails,
-  summarizeTokens,
+  summarizeTokensFromDetails,
   summarizeUsage,
   unwrapUsagePayload,
 } from "../utils/usage";
@@ -52,6 +52,7 @@ export const useCodexStore = defineStore("codex", () => {
   const usage = ref<UsageStats>({ totalRequests: 0, successCount: 0, failCount: 0 });
   const usageRaw = ref<unknown>(null);
   const usageUpdatedAt = ref(0);
+  const usageDetails = computed(() => collectUsageDetails(usageRaw.value));
   const loading = ref(false);
   const usageLoading = ref(false);
   const fetchError = ref<string | null>(null);
@@ -64,10 +65,16 @@ export const useCodexStore = defineStore("codex", () => {
     if (!usage.value.totalRequests) return "0";
     return ((usage.value.successCount / usage.value.totalRequests) * 100).toFixed(1);
   });
-  const usageTokens = computed<UsageTokens>(() => summarizeTokens(usageRaw.value));
-  const usageRates = computed<UsageRates>(() => calculateRecentRates(usageRaw.value, 30, usageUpdatedAt.value));
-  const usageSeries = computed<UsageSparklineSeries>(() => buildMinuteSeries(usageRaw.value, 60, usageUpdatedAt.value));
-  const serviceHealth = computed<ServiceHealthData>(() => calculateServiceHealthData(collectUsageDetails(usageRaw.value)));
+  const usageTokens = computed<UsageTokens>(() =>
+    summarizeTokensFromDetails(usageRaw.value, usageDetails.value),
+  );
+  const usageRates = computed<UsageRates>(() =>
+    calculateRecentRatesFromDetails(usageDetails.value, 30, usageUpdatedAt.value),
+  );
+  const usageSeries = computed<UsageSparklineSeries>(() =>
+    buildMinuteSeriesFromDetails(usageDetails.value, 60, usageUpdatedAt.value),
+  );
+  const serviceHealth = computed<ServiceHealthData>(() => calculateServiceHealthData(usageDetails.value));
 
   async function refreshUsage() {
     usageLoading.value = true;

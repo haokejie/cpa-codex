@@ -6,6 +6,7 @@ import { useCodexStore } from "../stores/codex";
 import type { AuthFileItem } from "../types";
 import { collectUsageDetails, extractTotalTokens, normalizeAuthIndex } from "../utils/usage";
 import { buildSourceInfoMap, resolveSourceDisplay, type CredentialInfo } from "../utils/sourceResolver";
+import BaseCard from "./BaseCard.vue";
 
 const store = useCodexStore();
 const { configs, usageRaw, usageLoading } = storeToRefs(store);
@@ -268,18 +269,12 @@ function toggleRow(id: string) {
 </script>
 
 <template>
-  <section class="card">
-    <div class="card-head">
-      <div>
-        <h2 class="card-title">请求事件明细</h2>
-        <p class="card-desc">最近请求与 Token 细分</p>
-      </div>
-      <div class="card-actions">
-        <button class="btn-ghost btn-sm" @click="clearFilters" :disabled="!hasActiveFilters">清空筛选</button>
-        <button class="btn-ghost btn-sm" @click="exportCsv" :disabled="filteredRows.length === 0">导出 CSV</button>
-        <button class="btn-ghost btn-sm" @click="exportJson" :disabled="filteredRows.length === 0">导出 JSON</button>
-      </div>
-    </div>
+  <BaseCard title="请求事件明细" description="最近请求与 Token 细分" headerAlign="center">
+    <template #actions>
+      <button class="btn-ghost btn-sm" @click="clearFilters" :disabled="!hasActiveFilters">清空筛选</button>
+      <button class="btn-ghost btn-sm" @click="exportCsv" :disabled="filteredRows.length === 0">导出 CSV</button>
+      <button class="btn-ghost btn-sm" @click="exportJson" :disabled="filteredRows.length === 0">导出 JSON</button>
+    </template>
 
     <div class="filters">
       <label class="filter-item">
@@ -415,44 +410,10 @@ function toggleRow(id: string) {
         </table>
       </div>
     </template>
-  </section>
+  </BaseCard>
 </template>
 
 <style scoped>
-.card {
-  background: #fff;
-  border: 1px solid var(--zinc-200);
-  border-radius: 12px;
-  padding: 20px 24px;
-}
-
-.card-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-
-.card-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--zinc-900);
-  margin-bottom: 4px;
-}
-
-.card-desc {
-  font-size: 12px;
-  color: var(--zinc-500);
-}
-
-.card-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-
 .btn-ghost {
   display: inline-flex;
   align-items: center;

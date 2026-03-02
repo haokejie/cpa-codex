@@ -2,6 +2,8 @@ use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{AppHandle, Manager};
+#[cfg(target_os = "macos")]
+use tauri::ActivationPolicy;
 
 pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
     let show = MenuItem::with_id(app, "show", "打开配置", true, None::<&str>)?;
@@ -15,6 +17,8 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .icon_as_template(true)
         .on_menu_event(|app, event| match event.id().as_ref() {
             "show" => {
+                #[cfg(target_os = "macos")]
+                let _ = app.set_activation_policy(ActivationPolicy::Regular);
                 if let Some(window) = app.get_webview_window("main") {
                     let _ = window.show();
                     let _ = window.unminimize();
@@ -29,6 +33,10 @@ pub fn setup_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_tray_icon_event(|tray, event| {
             if let TrayIconEvent::Click { .. } = event {
                 if let Some(window) = tray.app_handle().get_webview_window("main") {
+                    #[cfg(target_os = "macos")]
+                    let _ = tray
+                        .app_handle()
+                        .set_activation_policy(ActivationPolicy::Regular);
                     let _ = window.show();
                     let _ = window.unminimize();
                     let _ = window.set_focus();

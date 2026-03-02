@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { useApiKeysStore } from "../stores/apiKeys";
 import ConfirmDialog from "./ConfirmDialog.vue";
+import BaseCard from "./BaseCard.vue";
 
 const store = useApiKeysStore();
 
@@ -148,12 +149,8 @@ async function confirmClear() {
 </script>
 
 <template>
-  <section class="card">
-    <div class="card-head">
-      <div>
-        <h2 class="card-title">API 密钥</h2>
-        <p class="card-desc">管理代理 API 密钥（{{ totalCount }} 个）</p>
-      </div>
+  <BaseCard title="API 密钥" :description="`管理代理 API 密钥（${totalCount} 个）`" fullHeight>
+    <template #actions>
       <div class="head-actions">
         <button class="btn-ghost btn-sm btn-refresh" @click="store.fetchKeys" :disabled="store.loading || store.working">
           <span v-if="store.loading" class="btn-spinner" aria-hidden="true"></span>
@@ -162,7 +159,7 @@ async function confirmClear() {
         <button class="btn-ghost btn-sm" @click="openAdd" :disabled="store.loading || store.working">添加</button>
         <button class="btn-ghost btn-sm btn-ghost-danger" @click="requestClear" :disabled="!store.keys.length || store.working">清空</button>
       </div>
-    </div>
+    </template>
 
     <div v-if="store.error" class="error-banner">
       <span class="error-text">{{ store.error }}</span>
@@ -202,7 +199,7 @@ async function confirmClear() {
     </div>
 
     <div v-if="!store.loading" class="hint">每个条目代表一个 API 密钥（对应 /api-keys 接口）。</div>
-  </section>
+  </BaseCard>
 
   <ConfirmDialog
     :open="showDeleteDialog"
@@ -255,33 +252,6 @@ async function confirmClear() {
 </template>
 
 <style scoped>
-.card {
-  background: #fff;
-  border: 1px solid var(--zinc-200);
-  border-radius: 12px;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 52px - 56px);
-  min-height: 0;
-}
-.card-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 12px;
-}
-.card-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--zinc-900);
-  margin-bottom: 4px;
-}
-.card-desc {
-  font-size: 12px;
-  color: var(--zinc-500);
-}
 .head-actions {
   display: flex;
   gap: 8px;

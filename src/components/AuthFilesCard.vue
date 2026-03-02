@@ -5,6 +5,7 @@ import { useConfigStore } from "../stores/config";
 import type { AuthFileItem } from "../types";
 import { normalizeAutoRefreshIntervalSeconds } from "../utils/autoRefresh";
 import ConfirmDialog from "./ConfirmDialog.vue";
+import BaseCard from "./BaseCard.vue";
 
 const store = useAuthFilesStore();
 const configStore = useConfigStore();
@@ -19,31 +20,14 @@ const pendingDeleteName = ref('');
 const fileInput = ref<HTMLInputElement | null>(null);
 
 const MAX_AUTH_FILE_SIZE = 10 * 1024 * 1024;
+const ALL_FILTER = 'all';
+const NONE_FILTER = '__none__';
 
 function isCodexFile(f: { type?: string; provider?: string }) {
   return f.type === 'codex' || f.provider === 'codex';
 }
 
-const filteredFiles = computed(() => {
-  return (store.files ?? []).filter(isCodexFile);
-});
-
-const totalPages = computed(() => Math.ceil(filteredFiles.value.length / pageSize.value));
-const pagedFiles = computed(() =>
-  filteredFiles.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value),
-);
-
-watch(() => filteredFiles.value.length, () => {
-  if (currentPage.value > totalPages.value && totalPages.value > 0) currentPage.value = totalPages.value;
-  if (totalPages.value === 0) currentPage.value = 1;
-});
-watch(pageSize, () => { currentPage.value = 1; });
-
-function doJump() {
-  const n = parseInt(jumpPage.value);
-  if (n >= 1 && n <= totalPages.value) currentPage.value = n;
-  jumpPage.value = '';
-}
+const baseFiles = computed(() => (store.files ?? []).filter(isCodexFile));
 
 onMounted(() => store.fetchFiles());
 
@@ -122,7 +106,7 @@ async function handleFileChange(event: Event) {
 }
 
 function typeLabel(type?: string) {
-  return type || "unknown";
+  return type || 'unknown';
 }
 
 const HEALTHY_SET = ['ok', 'healthy', 'ready', 'success', 'available', 'context canceled', 'context cancelled'];
@@ -172,6 +156,130 @@ function statusKind(f: { disabled?: boolean; unavailable?: boolean; statusMessag
   return 'healthy';
 }
 
+const STATUS_ORDER = ['healthy', 'expired', 'exhausted', 'abnormal', 'error', 'disabled'] as const;
+const STATUS_LABELS: Record<(typeof STATUS_ORDER)[number], string> = {
+  healthy: '健康',
+  expired: '过期',
+  exhausted: '额度耗尽',
+  abnormal: '异常',
+  error: '不可用',
+  disabled: '已禁用',
+};
+
+const typeFilter = ref(ALL_FILTER);
+const statusFilter = ref(ALL_FILTER);
+const authIndexFilter = ref(ALL_FILTER);
+const nameKeyword = ref('');
+
+function fileTypeValue(f: AuthFileItem) {
+  return f.type || f.provider || 'unknown';
+}
+
+function authIndexValue(f: AuthFileItem) {
+  const raw = f.authIndex ?? f.auth_index;
+  if (raw === undefined || raw === null || raw === '') return NONE_FILTER;
+  return String(raw);
+}
+
+const typeOptions = computed(() => {
+  const values = Array.from(new Set(baseFiles.value.map((f) => fileTypeValue(f))));
+  values.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN'));
+  return [
+    { value: ALL_FILTER, label: '全部类型' },
+    ...values.map((value) => ({
+      value,
+      label: value === 'unknown' ? '未知' : value,
+    })),
+  ];
+});
+
+const statusOptions = computed(() => {
+  const present = new Set(baseFiles.value.map((f) => statusKind(f)));
+  return [
+    { value: ALL_FILTER, label: '全部状态' },
+    ...STATUS_ORDER.filter((status) => present.has(status)).map((status) => ({
+      value: status,
+      label: STATUS_LABELS[status],
+    })),
+  ];
+});
+
+const authIndexOptions = computed(() => {
+  const values = Array.from(new Set(baseFiles.value.map((f) => authIndexValue(f))));
+  values.sort((a, b) => a.localeCompare(b, 'zh-Hans-CN', { numeric: true }));
+  return [
+    { value: ALL_FILTER, label: '全部索引' },
+    ...values.map((value) => ({
+      value,
+      label: value === NONE_FILTER ? '无索引' : value,
+    })),
+  ];
+});
+
+const typeOptionSet = computed(() => new Set(typeOptions.value.map((option) => option.value)));
+const statusOptionSet = computed(() => new Set(statusOptions.value.map((option) => option.value)));
+const authIndexOptionSet = computed(() => new Set(authIndexOptions.value.map((option) => option.value)));
+
+const effectiveTypeFilter = computed(() => (typeOptionSet.value.has(typeFilter.value) ? typeFilter.value : ALL_FILTER));
+const effectiveStatusFilter = computed(() => (statusOptionSet.value.has(statusFilter.value) ? statusFilter.value : ALL_FILTER));
+const effectiveAuthIndexFilter = computed(() =>
+  authIndexOptionSet.value.has(authIndexFilter.value) ? authIndexFilter.value : ALL_FILTER,
+);
+
+const filteredFiles = computed(() =>
+  baseFiles.value.filter((f) => {
+    const typeMatched = effectiveTypeFilter.value === ALL_FILTER || fileTypeValue(f) === effectiveTypeFilter.value;
+    const statusMatched = effectiveStatusFilter.value === ALL_FILTER || statusKind(f) === effectiveStatusFilter.value;
+    const authIndexMatched = effectiveAuthIndexFilter.value === ALL_FILTER
+      || authIndexValue(f) === effectiveAuthIndexFilter.value;
+    const keyword = nameKeyword.value.trim().toLowerCase();
+    const nameMatched = !keyword || f.name.toLowerCase().includes(keyword);
+    return typeMatched && statusMatched && authIndexMatched && nameMatched;
+  }),
+);
+
+const hasActiveFilters = computed(
+  () =>
+    effectiveTypeFilter.value !== ALL_FILTER
+    || effectiveStatusFilter.value !== ALL_FILTER
+    || effectiveAuthIndexFilter.value !== ALL_FILTER
+    || nameKeyword.value.trim() !== '',
+);
+
+const descriptionText = computed(() => {
+  const total = baseFiles.value.length;
+  if (!hasActiveFilters.value) return `管理 Codex 认证文件（${total} 个）`;
+  return `管理 Codex 认证文件（${filteredFiles.value.length}/${total} 个）`;
+});
+
+function clearFilters() {
+  typeFilter.value = ALL_FILTER;
+  statusFilter.value = ALL_FILTER;
+  authIndexFilter.value = ALL_FILTER;
+  nameKeyword.value = '';
+}
+
+watch([typeFilter, statusFilter, authIndexFilter, nameKeyword], () => {
+  currentPage.value = 1;
+});
+
+const totalPages = computed(() => Math.ceil(filteredFiles.value.length / pageSize.value));
+const pagedFiles = computed(() =>
+  filteredFiles.value.slice((currentPage.value - 1) * pageSize.value, currentPage.value * pageSize.value),
+);
+
+watch(() => filteredFiles.value.length, () => {
+  if (currentPage.value > totalPages.value && totalPages.value > 0) currentPage.value = totalPages.value;
+  if (totalPages.value === 0) currentPage.value = 1;
+});
+watch(pageSize, () => { currentPage.value = 1; });
+
+function doJump() {
+  const n = parseInt(jumpPage.value);
+  if (n >= 1 && n <= totalPages.value) currentPage.value = n;
+  jumpPage.value = '';
+}
+
 function formatTime(v?: string | number) {
   if (!v) return '';
   const d = new Date(typeof v === 'number' ? v * 1000 : v);
@@ -183,7 +291,7 @@ function formatTime(v?: string | number) {
 }
 
 const cleanTargets = computed(() => {
-  return filteredFiles.value.filter((f: AuthFileItem) => {
+  return baseFiles.value.filter((f: AuthFileItem) => {
     const s = statusKind(f);
     return s === 'expired' || s === 'error';
   });
@@ -237,26 +345,24 @@ async function confirmDelete() {
 </script>
 
 <template>
-  <section class="card">
-    <div class="card-head">
-      <div class="head-row">
-        <div>
-          <h2 class="card-title">认证文件</h2>
-          <p class="card-desc">管理 Codex 认证文件（{{ filteredFiles.length }} 个）</p>
-        </div>
-        <div class="head-actions">
-          <button class="btn-ghost btn-sm btn-refresh" @click="store.fetchFiles" :disabled="store.loading">
-            <span v-if="store.loading" class="btn-spinner" aria-hidden="true"></span>
-            {{ store.loading ? "刷新中..." : "刷新" }}
-          </button>
-          <button class="btn-ghost btn-sm" @click="handleUploadClick" :disabled="store.loading || store.uploading">
-            {{ store.uploading ? "上传中..." : "上传" }}
-          </button>
-          <button class="btn-ghost btn-sm btn-ghost-danger" @click="openCleanDialog" :disabled="!cleanTargets.length">一键清理</button>
-          <button class="btn-danger btn-sm" @click="showConfirm = true" :disabled="!store.files.length">清空</button>
-        </div>
+  <BaseCard
+    title="认证文件"
+    :description="descriptionText"
+    fullHeight
+  >
+    <template #actions>
+      <div class="head-actions">
+        <button class="btn-ghost btn-sm btn-refresh" @click="store.fetchFiles" :disabled="store.loading">
+          <span v-if="store.loading" class="btn-spinner" aria-hidden="true"></span>
+          {{ store.loading ? "刷新中..." : "刷新" }}
+        </button>
+        <button class="btn-ghost btn-sm" @click="handleUploadClick" :disabled="store.loading || store.uploading">
+          {{ store.uploading ? "上传中..." : "上传" }}
+        </button>
+        <button class="btn-ghost btn-sm btn-ghost-danger" @click="openCleanDialog" :disabled="!cleanTargets.length">一键清理</button>
+        <button class="btn-danger btn-sm" @click="showConfirm = true" :disabled="!store.files.length">清空</button>
       </div>
-    </div>
+    </template>
 
     <div v-if="store.error" class="error-banner">
       <span class="error-text">{{ store.error }}</span>
@@ -276,14 +382,49 @@ async function confirmDelete() {
       @change="handleFileChange"
     />
 
+    <div v-if="baseFiles.length" class="filters">
+      <label class="filter-item">
+        <span class="filter-label">类型</span>
+        <select v-model="typeFilter" class="filter-select">
+          <option v-for="opt in typeOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
+      </label>
+      <label class="filter-item">
+        <span class="filter-label">状态</span>
+        <select v-model="statusFilter" class="filter-select">
+          <option v-for="opt in statusOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
+      </label>
+      <label class="filter-item">
+        <span class="filter-label">索引</span>
+        <select v-model="authIndexFilter" class="filter-select">
+          <option v-for="opt in authIndexOptions" :key="opt.value" :value="opt.value">{{ opt.label }}</option>
+        </select>
+      </label>
+      <label class="filter-item">
+        <span class="filter-label">名称</span>
+        <input
+          v-model="nameKeyword"
+          class="filter-input"
+          placeholder="搜索文件名"
+          type="search"
+        />
+      </label>
+      <button class="btn-ghost btn-sm" @click="clearFilters" :disabled="!hasActiveFilters">清空筛选</button>
+    </div>
+
     <div v-if="store.loading" class="empty-state keep-height">
       <p class="empty-text">加载中...</p>
     </div>
 
-    <div v-else-if="!filteredFiles.length && !store.error" class="empty-state">
+    <div v-else-if="!baseFiles.length && !store.error" class="empty-state">
       <svg class="empty-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/></svg>
       <p class="empty-text">暂无 Codex 认证文件</p>
+    </div>
+
+    <div v-else-if="!filteredFiles.length" class="empty-state">
+      <p class="empty-text">无匹配结果</p>
     </div>
 
     <div v-else class="file-list">
@@ -297,7 +438,7 @@ async function confirmDelete() {
       <div class="file-body">
         <div v-for="f in pagedFiles" :key="f.name" class="file-row">
         <span class="col-name file-name" :class="{ 'file-disabled': f.disabled }">{{ f.name }}</span>
-        <span class="col-type file-type">{{ typeLabel(f.type) }}</span>
+        <span class="col-type file-type">{{ typeLabel(f.type ?? f.provider) }}</span>
         <span class="col-status">
           <span class="badge" :class="'badge-' + statusKind(f)">
             {{ { healthy: '健康', expired: '过期', exhausted: '额度耗尽', abnormal: '异常', error: '不可用', disabled: '已禁用' }[statusKind(f)] }}
@@ -337,7 +478,7 @@ async function confirmDelete() {
         <button class="btn-ghost btn-xs" @click="doJump">GO</button>
       </div>
     </div>
-  </section>
+  </BaseCard>
 
   <ConfirmDialog
     :open="showConfirm"
@@ -387,21 +528,7 @@ async function confirmDelete() {
 </template>
 
 <style scoped>
-.card {
-  background: #fff;
-  border: 1px solid var(--zinc-200);
-  border-radius: 12px;
-  padding: 20px 24px;
-  display: flex;
-  flex-direction: column;
-  height: calc(100vh - 52px - 56px);
-  min-height: 0;
-}
-.card-head { margin-bottom: 16px; }
-.head-row { display: flex; justify-content: space-between; align-items: flex-start; }
 .head-actions { display: flex; gap: 8px; }
-.card-title { font-size: 15px; font-weight: 600; color: var(--zinc-900); margin-bottom: 4px; }
-.card-desc { font-size: 12px; color: var(--zinc-500); }
 .error-banner {
   display: flex; align-items: center; justify-content: space-between;
   padding: 10px 12px; background: #fef2f2; border-radius: 8px;
@@ -467,6 +594,45 @@ async function confirmDelete() {
   color: #dc2626;
 }
 .btn-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
+.filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.filter-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.filter-label {
+  font-size: 12px;
+  color: var(--zinc-500);
+}
+.filter-select {
+  height: 28px;
+  border: 1px solid var(--zinc-200);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--zinc-700);
+  font-size: 12px;
+  padding: 0 8px;
+}
+.filter-input {
+  height: 28px;
+  border: 1px solid var(--zinc-200);
+  border-radius: 6px;
+  background: #fff;
+  color: var(--zinc-700);
+  font-size: 12px;
+  padding: 0 8px;
+  width: 140px;
+}
+.filter-input:focus {
+  outline: none;
+  border-color: #6366F1;
+  box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.10);
+}
 .btn-refresh { display: inline-flex; align-items: center; gap: 6px; }
 .btn-spinner {
   width: 12px;

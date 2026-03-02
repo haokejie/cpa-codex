@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import type { CSSProperties } from "vue";
 import { useCodexStore } from "../stores/codex";
+import BaseCard from "./BaseCard.vue";
 
 const store = useCodexStore();
 const activeTooltip = ref<number | null>(null);
@@ -191,16 +192,18 @@ function handleScrollerScroll() {
 </script>
 
 <template>
-  <section class="card health-card">
-    <div class="health-header">
-      <h3 class="health-title">服务健康监测</h3>
-      <div class="health-meta">
-        <span class="health-window">近7天 / 30分钟</span>
-        <span class="health-rate" :class="rateClass">
-          {{ store.usageLoading || !hasData ? '--' : `${healthData.successRate.toFixed(1)}%` }}
-        </span>
+  <BaseCard class="health-card">
+    <template #header>
+      <div class="health-header">
+        <h3 class="health-title">服务健康监测</h3>
+        <div class="health-meta">
+          <span class="health-window">近7天 / 30分钟</span>
+          <span class="health-rate" :class="rateClass">
+            {{ store.usageLoading || !hasData ? '--' : `${healthData.successRate.toFixed(1)}%` }}
+          </span>
+        </div>
       </div>
-    </div>
+    </template>
 
     <div class="health-grid-scroller" ref="scrollerRef" @scroll="handleScrollerScroll">
       <div class="health-grid" ref="gridRef">
@@ -257,17 +260,10 @@ function handleScrollerScroll() {
       </div>
       <span class="health-legend-label">最新</span>
     </div>
-  </section>
+  </BaseCard>
 </template>
 
 <style scoped>
-.card {
-  background: #fff;
-  border: 1px solid var(--zinc-200);
-  border-radius: 12px;
-  padding: 20px 24px;
-}
-
 .health-card {
   display: flex;
   flex-direction: column;

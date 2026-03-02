@@ -39,6 +39,7 @@ export async function getConfig(): Promise<AppConfig> {
     autostart_enabled: false,
     tray_enabled: true,
     close_to_tray: true,
+    dock_visible_on_minimize: true,
     auto_refresh_enabled: false,
     auto_refresh_interval_seconds: 60,
   };
@@ -53,6 +54,10 @@ export async function setTrayEnabled(): Promise<CommandResult> {
 }
 
 export async function setCloseToTray(): Promise<CommandResult> {
+  return { ok: true };
+}
+
+export async function setDockVisibleOnMinimize(): Promise<CommandResult> {
   return { ok: true };
 }
 

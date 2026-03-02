@@ -15,6 +15,8 @@ use tauri_plugin_autostart::MacosLauncher;
 
 #[cfg(target_os = "macos")]
 use tauri::RunEvent;
+#[cfg(target_os = "macos")]
+use tauri::ActivationPolicy;
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -36,6 +38,10 @@ pub fn run() {
             if state.config.get().tray_enabled {
                 crate::tray::setup_tray(&app_handle)?;
             }
+            #[cfg(target_os = "macos")]
+            {
+                let _ = app_handle.set_activation_policy(ActivationPolicy::Regular);
+            }
             crate::background::start_background_worker(app_handle);
             Ok(())
         })
@@ -46,9 +52,20 @@ pub fn run() {
                     .try_state::<AppState>()
                     .map(|s| s.config.get().close_to_tray)
                     .unwrap_or(true);
+                let dock_visible_on_minimize = window
+                    .app_handle()
+                    .try_state::<AppState>()
+                    .map(|s| s.config.get().dock_visible_on_minimize)
+                    .unwrap_or(true);
                 if close_to_tray {
                     api.prevent_close();
                     let _ = window.hide();
+                    #[cfg(target_os = "macos")]
+                    if !dock_visible_on_minimize {
+                        let _ = window
+                            .app_handle()
+                            .set_activation_policy(ActivationPolicy::Accessory);
+                    }
                 }
             }
         })
@@ -57,6 +74,7 @@ pub fn run() {
             commands::set_autostart_enabled,
             commands::set_tray_enabled,
             commands::set_close_to_tray,
+            commands::set_dock_visible_on_minimize,
             commands::set_auto_refresh_enabled,
             commands::set_auto_refresh_interval_seconds,
             commands::login,
@@ -88,6 +106,7 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let RunEvent::Reopen { .. } = event {
                 if let Some(window) = app_handle.get_webview_window("main") {
+                    let _ = app_handle.set_activation_policy(ActivationPolicy::Regular);
                     let _ = window.show();
                     let _ = window.unminimize();
                     let _ = window.set_focus();

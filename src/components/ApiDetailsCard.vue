@@ -5,6 +5,7 @@ import { useCodexStore } from "../stores/codex";
 import { buildApiStats, formatCompactNumber } from "../utils/usage";
 import type { UsageTimeRange } from "../utils/usage";
 import type { ApiStats } from "../types";
+import BaseCard from "./BaseCard.vue";
 
 const store = useCodexStore();
 const { usageRaw, usageLoading } = storeToRefs(store);
@@ -78,35 +79,29 @@ onMounted(() => {
 </script>
 
 <template>
-  <section class="card">
-    <div class="card-head">
-      <div>
-        <h2 class="card-title">API 详细统计</h2>
-        <p class="card-desc">按 API 端点汇总请求与 Token</p>
+  <BaseCard title="API 详细统计" description="按 API 端点汇总请求与 Token">
+    <template #actions>
+      <div class="range-switch">
+        <button
+          type="button"
+          class="range-btn"
+          :class="{ 'range-btn-active': range === 'all' }"
+          @click="range = 'all'"
+        >全部</button>
+        <button
+          type="button"
+          class="range-btn"
+          :class="{ 'range-btn-active': range === '24h' }"
+          @click="range = '24h'"
+        >近24小时</button>
+        <button
+          type="button"
+          class="range-btn"
+          :class="{ 'range-btn-active': range === 'today' }"
+          @click="range = 'today'"
+        >今日</button>
       </div>
-      <div class="card-actions">
-        <div class="range-switch">
-          <button
-            type="button"
-            class="range-btn"
-            :class="{ 'range-btn-active': range === 'all' }"
-            @click="range = 'all'"
-          >全部</button>
-          <button
-            type="button"
-            class="range-btn"
-            :class="{ 'range-btn-active': range === '24h' }"
-            @click="range = '24h'"
-          >近24小时</button>
-          <button
-            type="button"
-            class="range-btn"
-            :class="{ 'range-btn-active': range === 'today' }"
-            @click="range = 'today'"
-          >今日</button>
-        </div>
-      </div>
-    </div>
+    </template>
 
     <div v-if="usageLoading && sorted.length === 0" class="empty-state keep-height">
       <p class="empty-text">加载中...</p>
@@ -204,44 +199,10 @@ onMounted(() => {
         </div>
       </div>
     </template>
-  </section>
+  </BaseCard>
 </template>
 
 <style scoped>
-.card {
-  background: #fff;
-  border: 1px solid var(--zinc-200);
-  border-radius: 12px;
-  padding: 20px 24px;
-}
-
-.card-head {
-  margin-bottom: 16px;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.card-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--zinc-900);
-  margin-bottom: 4px;
-}
-
-.card-desc {
-  font-size: 12px;
-  color: var(--zinc-500);
-}
-
-.card-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  justify-content: flex-end;
-}
-
 .btn-ghost {
   display: inline-flex;
   align-items: center;
