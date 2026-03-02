@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, ref, onMounted } from "vue";
 import { storeToRefs } from "pinia";
 import { useCodexStore } from "../stores/codex";
 import { buildApiStats, formatCompactNumber } from "../utils/usage";
@@ -65,6 +65,16 @@ const arrow = (key: ApiSortKey) => {
 
 const modelRows = (api: ApiStats) =>
   Object.entries(api.models).sort((a, b) => b[1].requests - a[1].requests);
+
+function handleRefresh() {
+  if (usageLoading.value) return;
+  store.refreshUsage();
+}
+
+onMounted(() => {
+  if (usageLoading.value) return;
+  store.refreshUsage();
+});
 </script>
 
 <template>
@@ -131,6 +141,15 @@ const modelRows = (api: ApiStats) =>
           @click="handleSort('tokens')"
         >
           Token 数{{ arrow('tokens') }}
+        </button>
+        <button
+          type="button"
+          class="btn-ghost btn-sm api-refresh-btn"
+          :disabled="usageLoading"
+          @click="handleRefresh"
+        >
+          <span v-if="usageLoading" class="btn-spinner" aria-hidden="true"></span>
+          {{ usageLoading ? '刷新中...' : '刷新' }}
         </button>
       </div>
 
@@ -220,6 +239,54 @@ const modelRows = (api: ApiStats) =>
   display: flex;
   align-items: center;
   gap: 8px;
+  justify-content: flex-end;
+}
+
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 30px;
+  padding: 0 12px;
+  background: transparent;
+  color: var(--zinc-600);
+  border: 1px solid var(--zinc-200);
+  border-radius: 7px;
+  font-size: 12px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.btn-ghost:hover:not(:disabled) {
+  background: var(--zinc-50);
+  border-color: var(--zinc-300);
+  color: var(--zinc-900);
+}
+
+.btn-ghost:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+
+.btn-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--zinc-300);
+  border-top-color: var(--zinc-600);
+  border-radius: 50%;
+  animation: usage-spin 0.8s linear infinite;
+}
+
+.api-refresh-btn {
+  margin-left: auto;
+}
+
+@keyframes usage-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
 }
 
 .range-switch {

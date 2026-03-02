@@ -245,7 +245,10 @@ async function confirmDelete() {
           <p class="card-desc">管理 Codex 认证文件（{{ filteredFiles.length }} 个）</p>
         </div>
         <div class="head-actions">
-          <button class="btn-ghost btn-sm" @click="store.fetchFiles" :disabled="store.loading">刷新</button>
+          <button class="btn-ghost btn-sm btn-refresh" @click="store.fetchFiles" :disabled="store.loading">
+            <span v-if="store.loading" class="btn-spinner" aria-hidden="true"></span>
+            {{ store.loading ? "刷新中..." : "刷新" }}
+          </button>
           <button class="btn-ghost btn-sm" @click="handleUploadClick" :disabled="store.loading || store.uploading">
             {{ store.uploading ? "上传中..." : "上传" }}
           </button>
@@ -464,6 +467,19 @@ async function confirmDelete() {
   color: #dc2626;
 }
 .btn-ghost:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-refresh { display: inline-flex; align-items: center; gap: 6px; }
+.btn-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--zinc-300);
+  border-top-color: var(--zinc-600);
+  border-radius: 50%;
+  animation: btn-spin 0.8s linear infinite;
+}
+@keyframes btn-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 .btn-danger {
   background: none; border: 1px solid #fecaca; border-radius: 7px;
   color: #dc2626; font-family: inherit; cursor: pointer;

@@ -155,7 +155,10 @@ async function confirmClear() {
         <p class="card-desc">管理代理 API 密钥（{{ totalCount }} 个）</p>
       </div>
       <div class="head-actions">
-        <button class="btn-ghost btn-sm" @click="store.fetchKeys" :disabled="store.loading || store.working">刷新</button>
+        <button class="btn-ghost btn-sm btn-refresh" @click="store.fetchKeys" :disabled="store.loading || store.working">
+          <span v-if="store.loading" class="btn-spinner" aria-hidden="true"></span>
+          {{ store.loading ? "刷新中..." : "刷新" }}
+        </button>
         <button class="btn-ghost btn-sm" @click="openAdd" :disabled="store.loading || store.working">添加</button>
         <button class="btn-ghost btn-sm btn-ghost-danger" @click="requestClear" :disabled="!store.keys.length || store.working">清空</button>
       </div>
@@ -424,6 +427,19 @@ async function confirmClear() {
   color: var(--red-600);
 }
 .btn-sm { font-size: 12px; padding: 4px 10px; height: 28px; }
+.btn-refresh { display: inline-flex; align-items: center; gap: 6px; }
+.btn-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid var(--zinc-300);
+  border-top-color: var(--zinc-600);
+  border-radius: 50%;
+  animation: btn-spin 0.8s linear infinite;
+}
+@keyframes btn-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
 
 .btn-dashed {
   height: 34px;

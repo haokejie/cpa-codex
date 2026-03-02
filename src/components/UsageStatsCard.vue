@@ -136,7 +136,10 @@ function syncCharts() {
   });
 }
 
-onMounted(syncCharts);
+onMounted(() => {
+  if (!store.usageLoading) store.refreshUsage();
+  syncCharts();
+});
 onBeforeUnmount(destroyCharts);
 watch(
   () => [sparklineReady.value, store.usageSeries.labels, store.usageSeries.requests, store.usageSeries.tokens],
