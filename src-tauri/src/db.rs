@@ -8,6 +8,8 @@ use tauri::Manager;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuthFileRow {
+    #[serde(default, skip_deserializing)]
+    pub id: Option<i64>,
     pub name: String,
     #[serde(rename = "type", default)]
     pub file_type: Option<String>,
@@ -315,10 +317,11 @@ impl Db {
     }
 
     pub async fn list_auth_files(&self, account_key: &str) -> Result<Vec<AuthFileRow>, String> {
-        let rows = sqlx::query("SELECT name, type, provider, size, disabled, unavailable, status, status_message, last_refresh FROM auth_files WHERE account_key = ?1 ORDER BY name")
+        let rows = sqlx::query("SELECT id, name, type, provider, size, disabled, unavailable, status, status_message, last_refresh FROM auth_files WHERE account_key = ?1 ORDER BY name")
             .bind(account_key)
             .fetch_all(&self.pool).await.map_err(|e| format!("读取认证文件失败: {e}"))?;
         Ok(rows.iter().map(|r| AuthFileRow {
+            id: r.try_get("id").ok(),
             name: r.try_get("name").unwrap_or_default(),
             file_type: r.try_get("type").ok(),
             provider: r.try_get("provider").ok(),
@@ -374,14 +377,17 @@ async fn ensure_schema(pool: &SqlitePool) -> Result<(), String> {
     .await
     .map_err(|e| format!("初始化状态表失败: {e}"))?;
 
-    // 迁移：旧 auth_files 表无 account_key 列，DROP 重建（缓存可重新同步）
+    // 迁移：旧 auth_files 表无 account_key / id 列，DROP 重建（缓存可重新同步）
     let cols = get_table_columns(pool, "auth_files").await.unwrap_or_default();
-    if !cols.is_empty() && !cols.iter().any(|name| name == "account_key") {
+    if !cols.is_empty()
+        && (!cols.iter().any(|name| name == "account_key") || !cols.iter().any(|name| name == "id"))
+    {
         let _ = sqlx::query("DROP TABLE auth_files").execute(pool).await;
     }
 
     sqlx::query(
         "CREATE TABLE IF NOT EXISTS auth_files (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             account_key TEXT NOT NULL,
             name TEXT NOT NULL,
             type TEXT,
@@ -392,7 +398,7 @@ async fn ensure_schema(pool: &SqlitePool) -> Result<(), String> {
             status TEXT,
             status_message TEXT,
             last_refresh TEXT,
-            PRIMARY KEY (account_key, name)
+            UNIQUE (account_key, name)
         )",
     )
     .execute(pool)
@@ -471,6 +477,7 @@ mod tests {
                 .await
                 .expect("get auth_files columns");
             for col in [
+                "id",
                 "account_key",
                 "unavailable",
                 "status",

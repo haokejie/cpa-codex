@@ -134,6 +134,7 @@ export type CommandResult = { ok: boolean };
 
 // 认证文件
 export type AuthFileItem = {
+  id?: number;
   name: string;
   type?: string;
   provider?: string;
