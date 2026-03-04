@@ -1,16 +1,20 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, computed, watch } from "vue";
 import { useAuthFilesStore } from "../stores/authFiles";
+import { useAuthFilesExtrasStore } from "../stores/authFilesExtras";
 import { useConfigStore } from "../stores/config";
-import type { AuthFileItem } from "../types";
+import type { AuthFileItem, AuthFileModelDefinition } from "../types";
 import { normalizeAutoRefreshIntervalSeconds } from "../utils/autoRefresh";
+import { saveTextToFile } from "../utils/download";
+import { DEFAULT_AUTH_FILES_PAGE_SIZE, MAX_AUTH_FILE_SIZE, MAX_AUTH_FILES_PAGE_SIZE, MIN_AUTH_FILES_PAGE_SIZE } from "../utils/constants";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import BaseCard from "./BaseCard.vue";
 
 const store = useAuthFilesStore();
+const extrasStore = useAuthFilesExtrasStore();
 const configStore = useConfigStore();
 const currentPage = ref(1);
-const pageSize = ref(5);
+const pageSize = ref(DEFAULT_AUTH_FILES_PAGE_SIZE);
 const showConfirm = ref(false);
 const jumpPage = ref('');
 const showCleanDialog = ref(false);
@@ -18,16 +22,18 @@ const cleaning = ref(false);
 const showDeleteDialog = ref(false);
 const pendingDeleteName = ref('');
 const fileInput = ref<HTMLInputElement | null>(null);
+const downloading = ref<Set<string>>(new Set());
+const downloadError = ref<string | null>(null);
+const modelsModalOpen = ref(false);
+const modelsLoading = ref(false);
+const modelsError = ref<string | null>(null);
+const modelsList = ref<AuthFileModelDefinition[]>([]);
+const modelsTargetName = ref('');
 
-const MAX_AUTH_FILE_SIZE = 10 * 1024 * 1024;
 const ALL_FILTER = 'all';
 const NONE_FILTER = '__none__';
 
-function isCodexFile(f: { type?: string; provider?: string }) {
-  return f.type === 'codex' || f.provider === 'codex';
-}
-
-const baseFiles = computed(() => (store.files ?? []).filter(isCodexFile));
+const baseFiles = computed(() => store.files ?? []);
 
 onMounted(() => store.fetchFiles());
 
@@ -65,6 +71,56 @@ function formatFileSize(size: number) {
   if (size < 1024) return `${size} B`;
   if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
   return `${(size / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function setDownloading(name: string, active: boolean) {
+  const next = new Set(downloading.value);
+  if (active) next.add(name);
+  else next.delete(name);
+  downloading.value = next;
+}
+
+async function handleDownload(file: AuthFileItem) {
+  const name = file.name;
+  if (!name) return;
+  if (downloading.value.has(name)) return;
+  downloadError.value = null;
+  setDownloading(name, true);
+  try {
+    const text = await extrasStore.downloadAuthFileText(name);
+    const ok = await saveTextToFile(text, name);
+    if (!ok) {
+      downloadError.value = "保存失败，请重试";
+    }
+  } catch (e) {
+    downloadError.value = String(e);
+  } finally {
+    setDownloading(name, false);
+  }
+}
+
+async function openModelsModal(file: AuthFileItem) {
+  const name = file.name;
+  if (!name) return;
+  modelsModalOpen.value = true;
+  modelsLoading.value = true;
+  modelsError.value = null;
+  modelsList.value = [];
+  modelsTargetName.value = name;
+  try {
+    modelsList.value = await extrasStore.fetchModelsForFile(name);
+  } catch (e) {
+    modelsError.value = String(e);
+  } finally {
+    modelsLoading.value = false;
+  }
+}
+
+function closeModelsModal() {
+  modelsModalOpen.value = false;
+  modelsList.value = [];
+  modelsError.value = null;
+  modelsTargetName.value = '';
 }
 
 function handleUploadClick() {
@@ -106,7 +162,11 @@ async function handleFileChange(event: Event) {
 }
 
 function typeLabel(type?: string) {
-  return type || 'unknown';
+  const raw = type || 'unknown';
+  const lower = raw.toLowerCase();
+  if (lower === 'iflow') return 'iFlow';
+  if (lower === 'gemini-cli') return 'Gemini CLI';
+  return raw;
 }
 
 const HEALTHY_SET = ['ok', 'healthy', 'ready', 'success', 'available', 'context canceled', 'context cancelled'];
@@ -248,8 +308,8 @@ const hasActiveFilters = computed(
 
 const descriptionText = computed(() => {
   const total = baseFiles.value.length;
-  if (!hasActiveFilters.value) return `管理 Codex 认证文件（${total} 个）`;
-  return `管理 Codex 认证文件（${filteredFiles.value.length}/${total} 个）`;
+  if (!hasActiveFilters.value) return `管理认证文件（${total} 个）`;
+  return `管理认证文件（${filteredFiles.value.length}/${total} 个）`;
 });
 
 function clearFilters() {
@@ -348,7 +408,6 @@ async function confirmDelete() {
   <BaseCard
     title="认证文件"
     :description="descriptionText"
-    fullHeight
   >
     <template #actions>
       <div class="head-actions">
@@ -371,6 +430,10 @@ async function confirmDelete() {
     <div v-if="store.uploadError" class="error-banner">
       <span class="error-text">{{ store.uploadError }}</span>
       <button class="btn-ghost btn-sm" @click="store.setUploadError(null)">关闭</button>
+    </div>
+    <div v-if="downloadError" class="error-banner">
+      <span class="error-text">{{ downloadError }}</span>
+      <button class="btn-ghost btn-sm" @click="downloadError = null">关闭</button>
     </div>
 
     <input
@@ -420,7 +483,7 @@ async function confirmDelete() {
     <div v-else-if="!baseFiles.length && !store.error" class="empty-state">
       <svg class="empty-icon" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
         <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M9 15h6"/></svg>
-      <p class="empty-text">暂无 Codex 认证文件</p>
+      <p class="empty-text">暂无认证文件</p>
     </div>
 
     <div v-else-if="!filteredFiles.length" class="empty-state">
@@ -437,7 +500,10 @@ async function confirmDelete() {
       </div>
       <div class="file-body">
         <div v-for="f in pagedFiles" :key="f.name" class="file-row">
-        <span class="col-name file-name" :class="{ 'file-disabled': f.disabled }">{{ f.name }}</span>
+        <div class="col-name file-name" :class="{ 'file-disabled': f.disabled }">
+          <span class="file-name-text">{{ f.name }}</span>
+          <span v-if="f.runtimeOnly" class="file-tag">运行时</span>
+        </div>
         <span class="col-type file-type">{{ typeLabel(f.type ?? f.provider) }}</span>
         <span class="col-status">
           <span class="badge" :class="'badge-' + statusKind(f)">
@@ -446,6 +512,16 @@ async function confirmDelete() {
         </span>
         <span class="col-refresh last-refresh">{{ f.lastRefresh ? formatTime(f.lastRefresh) : '-' }}</span>
         <span class="col-ops file-actions">
+          <button
+            class="btn-row"
+            @click="openModelsModal(f)"
+            :disabled="modelsLoading && modelsTargetName === f.name"
+          >{{ modelsLoading && modelsTargetName === f.name ? '加载中...' : '模型' }}</button>
+          <button
+            class="btn-row"
+            @click="handleDownload(f)"
+            :disabled="downloading.has(f.name)"
+          >{{ downloading.has(f.name) ? '下载中...' : '下载' }}</button>
           <button
             v-if="!f.runtimeOnly"
             class="btn-row"
@@ -464,9 +540,9 @@ async function confirmDelete() {
     <div v-if="filteredFiles.length" class="pagination">
       <span class="page-info">共 {{ filteredFiles.length }} 条，每页
         <select class="page-size-select" v-model="pageSize">
-          <option :value="5">5</option>
-          <option :value="10">10</option>
-          <option :value="20">20</option>
+          <option :value="MIN_AUTH_FILES_PAGE_SIZE">{{ MIN_AUTH_FILES_PAGE_SIZE }}</option>
+          <option :value="DEFAULT_AUTH_FILES_PAGE_SIZE">{{ DEFAULT_AUTH_FILES_PAGE_SIZE }}</option>
+          <option :value="MAX_AUTH_FILES_PAGE_SIZE">{{ MAX_AUTH_FILES_PAGE_SIZE }}</option>
         </select>
         条
       </span>
@@ -495,6 +571,36 @@ async function confirmDelete() {
     @confirm="confirmDelete"
     @cancel="showDeleteDialog = false"
   />
+
+  <div v-if="modelsModalOpen" class="mask">
+    <div class="dialog dialog-lg">
+      <div class="dialog-header">
+        <h3 class="dialog-title">模型列表</h3>
+        <div class="dialog-stats">
+          <span>文件：{{ modelsTargetName || '-' }}</span>
+          <span>数量：{{ modelsList.length }}</span>
+        </div>
+      </div>
+      <div class="dialog-body">
+        <div v-if="modelsLoading" class="dialog-message">加载中...</div>
+        <div v-else-if="modelsError" class="dialog-message dialog-error">{{ modelsError }}</div>
+        <div v-else-if="!modelsList.length" class="dialog-message">暂无模型</div>
+        <div v-else class="models-list">
+          <div v-for="model in modelsList" :key="model.id" class="models-item">
+            <div class="models-name">{{ model.id }}</div>
+            <div class="models-meta">
+              <span v-if="model.display_name">{{ model.display_name }}</span>
+              <span v-if="model.type">{{ model.type }}</span>
+              <span v-if="model.owned_by">{{ model.owned_by }}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="dialog-footer">
+        <button class="btn-ghost" @click="closeModelsModal">关闭</button>
+      </div>
+    </div>
+  </div>
 
   <div v-if="showCleanDialog" class="mask">
     <div class="dialog">
@@ -555,9 +661,32 @@ async function confirmDelete() {
 .col-type { width: 70px; flex-shrink: 0; }
 .col-status { width: 64px; flex-shrink: 0; }
 .col-refresh { width: 72px; flex-shrink: 0; }
-.col-ops { width: 100px; flex-shrink: 0; display: flex; justify-content: flex-end; }
-.file-name { font-size: 13px; color: var(--zinc-800); font-family: monospace; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-ops { width: 180px; flex-shrink: 0; display: flex; justify-content: flex-end; }
+.file-name { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.file-name-text {
+  font-size: 13px;
+  color: var(--zinc-800);
+  font-family: monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-tag {
+  flex-shrink: 0;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  line-height: 18px;
+  color: #2563eb;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+}
 .file-disabled { color: var(--zinc-400); text-decoration: line-through; }
+.file-name.file-disabled .file-name-text {
+  color: var(--zinc-400);
+  text-decoration: line-through;
+}
+.file-name.file-disabled .file-tag { opacity: 0.6; }
 .file-type { font-size: 11px; color: var(--zinc-400); flex-shrink: 0; }
 .badge { font-size: 11px; padding: 0 8px; border-radius: 10px; font-weight: 500; height: 20px; line-height: 20px; display: inline-block; }
 .badge-healthy { background: #f0fdf4; color: #16a34a; }
@@ -692,6 +821,43 @@ async function confirmDelete() {
   border-radius: 12px;
   box-shadow: 0 8px 40px rgba(0, 0, 0, 0.14);
   overflow: hidden;
+}
+.dialog-lg {
+  width: 520px;
+}
+.dialog-error {
+  color: #dc2626;
+}
+.models-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+  margin-top: 8px;
+  border: 1px solid var(--zinc-200);
+  border-radius: 8px;
+  padding: 8px;
+}
+.models-item {
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--zinc-50);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.models-name {
+  font-size: 12px;
+  color: var(--zinc-900);
+  font-family: monospace;
+}
+.models-meta {
+  font-size: 11px;
+  color: var(--zinc-500);
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
 }
 .dialog-header {
   padding: 20px 20px 0;

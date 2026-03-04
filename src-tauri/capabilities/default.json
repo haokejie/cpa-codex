@@ -6,6 +6,9 @@
   "permissions": [
     "core:default",
     "core:webview:allow-internal-toggle-devtools",
+    "clipboard-manager:default",
+    "dialog:default",
+    "fs:default",
     "opener:default"
   ]
 }

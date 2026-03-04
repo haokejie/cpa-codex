@@ -9,10 +9,20 @@ import UsageStatsCard from "./UsageStatsCard.vue";
 import ServiceHealthCard from "./ServiceHealthCard.vue";
 import CredentialStatsCard from "./CredentialStatsCard.vue";
 import RequestEventsDetailsCard from "./RequestEventsDetailsCard.vue";
+import UsageImportExportCard from "./UsageImportExportCard.vue";
 import AuthFilesCard from "./AuthFilesCard.vue";
+import AuthFilesOAuthCard from "./AuthFilesOAuthCard.vue";
 import ApiDetailsCard from "./ApiDetailsCard.vue";
 import ApiKeysCard from "./ApiKeysCard.vue";
 import BaseCard from "./BaseCard.vue";
+import DashboardCard from "./DashboardCard.vue";
+import ServerConfigCard from "./ServerConfigCard.vue";
+import SystemCard from "./SystemCard.vue";
+import ConfigFileCard from "./ConfigFileCard.vue";
+import AiProvidersCard from "./AiProvidersCard.vue";
+import OAuthCard from "./OAuthCard.vue";
+import QuotaCard from "./QuotaCard.vue";
+import LogsCard from "./LogsCard.vue";
 
 const configStore = useConfigStore();
 const authStore = useAuthStore();
@@ -24,16 +34,24 @@ onMounted(() => {
   codexStore.refreshQuotas();
 });
 
-type TabKey = 'codex' | 'auth' | 'api-keys' | 'usage' | 'api-details' | 'settings';
-const activeTab = ref<TabKey>('auth');
+type TabKey = 'dashboard' | 'server-config' | 'config-file' | 'ai-providers' | 'codex' | 'auth' | 'oauth' | 'api-keys' | 'usage' | 'quota' | 'logs' | 'api-details' | 'system' | 'settings';
+const activeTab = ref<TabKey>('dashboard');
 const autoRefreshSecondsInput = ref('');
 const autoRefreshError = ref('');
 
 const mainTabs: { key: TabKey; label: string }[] = [
+  { key: 'dashboard', label: '仪表盘' },
+  { key: 'server-config', label: '基础设置' },
+  { key: 'config-file', label: '配置文件' },
+  { key: 'ai-providers', label: 'AI 提供商' },
   { key: 'auth', label: '认证' },
+  { key: 'oauth', label: 'OAuth' },
   { key: 'api-keys', label: '密钥' },
   { key: 'usage', label: '统计' },
+  { key: 'quota', label: '配额' },
+  { key: 'logs', label: '日志' },
   { key: 'api-details', label: 'API 明细' },
+  { key: 'system', label: '系统' },
 ];
 
 const accountLabel = computed(() => {
@@ -109,12 +127,36 @@ async function saveAutoRefreshInterval() {
           :class="{ 'nav-active': activeTab === t.key }"
           @click="activeTab = t.key"
         >
-          <svg v-if="t.key === 'codex'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg v-if="t.key === 'dashboard'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+          </svg>
+          <svg v-else-if="t.key === 'server-config'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="18" x2="20" y2="18"/>
+            <circle cx="9" cy="6" r="2"/><circle cx="15" cy="12" r="2"/><circle cx="9" cy="18" r="2"/>
+          </svg>
+          <svg v-else-if="t.key === 'config-file'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+            <path d="M14 2v6h6"/>
+            <path d="M8 13h8"/><path d="M8 17h8"/>
+          </svg>
+          <svg v-else-if="t.key === 'ai-providers'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v4"/><path d="M12 18v4"/>
+            <path d="M4.93 4.93l2.83 2.83"/><path d="M16.24 16.24l2.83 2.83"/>
+            <path d="M2 12h4"/><path d="M18 12h4"/>
+            <path d="M4.93 19.07l2.83-2.83"/><path d="M16.24 7.76l2.83-2.83"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+          <svg v-else-if="t.key === 'codex'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
             <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
           </svg>
           <svg v-else-if="t.key === 'auth'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+          </svg>
+          <svg v-else-if="t.key === 'oauth'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M10 13a5 5 0 0 1 0-7l1.5-1.5a5 5 0 0 1 7 7L17 12"/>
+            <path d="M14 11a5 5 0 0 1 0 7l-1.5 1.5a5 5 0 0 1-7-7L7 12"/>
           </svg>
           <svg v-else-if="t.key === 'api-keys'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="7.5" cy="14.5" r="3.5"/>
@@ -123,8 +165,21 @@ async function saveAutoRefreshInterval() {
           <svg v-else-if="t.key === 'usage'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
           </svg>
+          <svg v-else-if="t.key === 'quota'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="12" y1="1" x2="12" y2="23"/>
+            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+          </svg>
+          <svg v-else-if="t.key === 'logs'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/>
+            <path d="M14 2v6h6"/>
+            <path d="M8 13h8"/>
+            <path d="M8 17h6"/>
+          </svg>
           <svg v-else-if="t.key === 'api-details'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 4h16v4H4z"/><path d="M4 10h16v4H4z"/><path d="M4 16h10v4H4z"/>
+          </svg>
+          <svg v-else-if="t.key === 'system'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
           </svg>
           <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
@@ -146,11 +201,29 @@ async function saveAutoRefreshInterval() {
 
       <main class="content">
         <div class="content-inner">
+          <!-- 仪表盘 -->
+          <DashboardCard v-if="activeTab === 'dashboard'" />
+
+          <!-- 基础设置（服务端） -->
+          <ServerConfigCard v-if="activeTab === 'server-config'" />
+
+          <!-- 配置文件编辑 -->
+          <ConfigFileCard v-if="activeTab === 'config-file'" />
+
+          <!-- AI 提供商 -->
+          <AiProvidersCard v-if="activeTab === 'ai-providers'" />
+
           <!-- Codex 账号 -->
           <CodexAccountCard v-if="activeTab === 'codex'" />
 
           <!-- 认证文件 -->
-          <AuthFilesCard v-if="activeTab === 'auth'" />
+          <template v-if="activeTab === 'auth'">
+            <AuthFilesCard />
+            <AuthFilesOAuthCard />
+          </template>
+
+          <!-- OAuth -->
+          <OAuthCard v-if="activeTab === 'oauth'" />
 
           <!-- API 密钥 -->
           <ApiKeysCard v-if="activeTab === 'api-keys'" />
@@ -158,15 +231,25 @@ async function saveAutoRefreshInterval() {
           <!-- 使用统计 -->
           <template v-if="activeTab === 'usage'">
             <UsageStatsCard />
+            <UsageImportExportCard />
             <ServiceHealthCard />
             <CredentialStatsCard />
             <RequestEventsDetailsCard />
           </template>
 
+          <!-- 配额管理 -->
+          <QuotaCard v-if="activeTab === 'quota'" />
+
+          <!-- 日志 -->
+          <LogsCard v-if="activeTab === 'logs'" />
+
           <!-- API 详细统计 -->
           <template v-if="activeTab === 'api-details'">
             <ApiDetailsCard />
           </template>
+
+          <!-- 系统信息 -->
+          <SystemCard v-if="activeTab === 'system'" />
 
           <!-- 设置 -->
           <template v-if="activeTab === 'settings'">

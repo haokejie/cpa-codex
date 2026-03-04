@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { AuthFileItem } from "../types";
-import { listAuthFiles, syncAuthFiles, setAuthFileStatus, deleteAuthFile, deleteAllAuthFiles, uploadAuthFile } from "../api/authFiles";
+import { listAuthFiles, syncAuthFiles, setAuthFileStatus, deleteAuthFile, deleteAllAuthFiles, uploadAuthFile, resetAuthFilesCache } from "../api/authFiles";
 
 export const useAuthFilesStore = defineStore("authFiles", () => {
   const files = ref<AuthFileItem[]>([]);
@@ -9,15 +9,55 @@ export const useAuthFilesStore = defineStore("authFiles", () => {
   const error = ref<string | null>(null);
   const uploading = ref(false);
   const uploadError = ref<string | null>(null);
+  const rawFiles = ref<unknown[]>([]);
+  const sanitizeErrors = ref<string[]>([]);
+
+  const normalizeAuthFiles = (items: AuthFileItem[]) =>
+    (items || [])
+      .filter((item): item is AuthFileItem => Boolean(item && typeof item === "object"))
+      .map((item) => ({
+        ...item,
+        name: typeof item.name === "string" ? item.name.trim() : "",
+      }))
+      .filter((item) => Boolean(item.name));
 
   async function fetchFiles() {
     loading.value = true;
     error.value = null;
     try {
       await syncAuthFiles();
-      files.value = await listAuthFiles();
+      const next = await listAuthFiles();
+      rawFiles.value = Array.isArray(next) ? (next as unknown[]) : [];
+      const sanitized = normalizeAuthFiles(next);
+      files.value = sanitized;
+      const dropped = rawFiles.value.length - sanitized.length;
+      sanitizeErrors.value = dropped > 0 ? [`丢弃无效认证文件：${dropped} 条`] : [];
     } catch (e) {
       error.value = String(e);
+      rawFiles.value = [];
+      files.value = normalizeAuthFiles(files.value);
+      sanitizeErrors.value = [];
+    } finally {
+      loading.value = false;
+    }
+  }
+
+  async function resetCache() {
+    loading.value = true;
+    error.value = null;
+    try {
+      await resetAuthFilesCache();
+      const next = await listAuthFiles();
+      rawFiles.value = Array.isArray(next) ? (next as unknown[]) : [];
+      const sanitized = normalizeAuthFiles(next);
+      files.value = sanitized;
+      const dropped = rawFiles.value.length - sanitized.length;
+      sanitizeErrors.value = dropped > 0 ? [`丢弃无效认证文件：${dropped} 条`] : [];
+    } catch (e) {
+      error.value = String(e);
+      rawFiles.value = [];
+      files.value = normalizeAuthFiles(files.value);
+      sanitizeErrors.value = [];
     } finally {
       loading.value = false;
     }
@@ -86,9 +126,12 @@ export const useAuthFilesStore = defineStore("authFiles", () => {
     files,
     loading,
     error,
+    rawFiles,
+    sanitizeErrors,
     uploading,
     uploadError,
     fetchFiles,
+    resetCache,
     setUploadError,
     uploadFiles,
     toggleDisabled,

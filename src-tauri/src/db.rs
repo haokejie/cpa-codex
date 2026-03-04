@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
 use sqlx::sqlite::{SqliteConnectOptions, SqlitePoolOptions};
 use sqlx::{Row, SqlitePool};
 use std::fs;
@@ -15,6 +16,20 @@ pub struct AuthFileRow {
     pub file_type: Option<String>,
     #[serde(default)]
     pub provider: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_auth_index", rename = "auth_index", alias = "authIndex")]
+    pub auth_index: Option<String>,
+    #[serde(default)]
+    pub metadata: Option<JsonValue>,
+    #[serde(default)]
+    pub attributes: Option<JsonValue>,
+    #[serde(default, rename = "id_token", alias = "idToken")]
+    pub id_token: Option<JsonValue>,
+    #[serde(default, rename = "plan_type", alias = "planType", alias = "plan_type")]
+    pub plan_type: Option<String>,
+    #[serde(default)]
+    pub account: Option<String>,
+    #[serde(default, deserialize_with = "deserialize_optional_bool", rename = "runtime_only", alias = "runtimeOnly")]
+    pub runtime_only: Option<bool>,
     #[serde(default)]
     pub size: Option<i64>,
     #[serde(default)]
@@ -27,6 +42,75 @@ pub struct AuthFileRow {
     pub status_message: Option<String>,
     #[serde(default)]
     pub last_refresh: Option<String>,
+}
+
+fn deserialize_auth_index<'de, D>(deserializer: D) -> Result<Option<String>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: Option<JsonValue> = Option::deserialize(deserializer)?;
+    let normalized = match value {
+        None | Some(JsonValue::Null) => None,
+        Some(JsonValue::Number(num)) => Some(num.to_string()),
+        Some(JsonValue::String(raw)) => {
+            let trimmed = raw.trim().to_string();
+            if trimmed.is_empty() { None } else { Some(trimmed) }
+        }
+        Some(other) => {
+            let raw = other.to_string();
+            if raw.trim().is_empty() { None } else { Some(raw) }
+        }
+    };
+    Ok(normalized)
+}
+
+fn deserialize_optional_bool<'de, D>(deserializer: D) -> Result<Option<bool>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value: Option<JsonValue> = Option::deserialize(deserializer)?;
+    let normalized = match value {
+        None | Some(JsonValue::Null) => None,
+        Some(JsonValue::Bool(v)) => Some(v),
+        Some(JsonValue::Number(num)) => num.as_i64().map(|v| v != 0),
+        Some(JsonValue::String(raw)) => {
+            let trimmed = raw.trim().to_lowercase();
+            if trimmed.is_empty() {
+                None
+            } else if trimmed == "true" || trimmed == "1" || trimmed == "yes" {
+                Some(true)
+            } else if trimmed == "false" || trimmed == "0" || trimmed == "no" {
+                Some(false)
+            } else {
+                None
+            }
+        }
+        _ => None,
+    };
+    Ok(normalized)
+}
+
+fn json_to_string(value: &Option<JsonValue>) -> Option<String> {
+    match value {
+        None | Some(JsonValue::Null) => None,
+        Some(JsonValue::String(raw)) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() { None } else { Some(trimmed.to_string()) }
+        }
+        Some(other) => serde_json::to_string(other).ok(),
+    }
+}
+
+fn string_to_json(value: Option<String>) -> Option<JsonValue> {
+    let raw = value?;
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    match serde_json::from_str::<JsonValue>(trimmed) {
+        Ok(parsed) => Some(parsed),
+        Err(_) => Some(JsonValue::String(raw)),
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -252,6 +336,12 @@ impl Db {
     pub async fn sync_auth_files(&self, account_key: &str, files: &[AuthFileRow]) -> Result<(), String> {
         let mut tx = self.pool.begin().await.map_err(|e| format!("开启事务失败: {e}"))?;
 
+        sqlx::query("DELETE FROM auth_files WHERE account_key = ?1 AND (name IS NULL OR trim(name) = '')")
+            .bind(account_key)
+            .execute(&mut *tx)
+            .await
+            .map_err(|e| format!("清理无效认证文件失败: {e}"))?;
+
         if files.is_empty() {
             sqlx::query("DELETE FROM auth_files WHERE account_key = ?1")
                 .bind(account_key)
@@ -263,7 +353,17 @@ impl Db {
         }
 
         let mut unique_names = std::collections::HashSet::new();
-        for f in files {
+        let valid_files: Vec<&AuthFileRow> = files
+            .iter()
+            .filter(|f| !f.name.trim().is_empty())
+            .collect();
+
+        if valid_files.is_empty() {
+            tx.commit().await.map_err(|e| format!("提交事务失败: {e}"))?;
+            return Ok(());
+        }
+
+        for f in &valid_files {
             unique_names.insert(f.name.as_str());
         }
 
@@ -283,13 +383,20 @@ impl Db {
             .await
             .map_err(|e| format!("清理过期认证文件失败: {e}"))?;
 
-        for f in files {
+        for f in &valid_files {
             sqlx::query(
-                "INSERT INTO auth_files (account_key, name, type, provider, size, disabled, unavailable, status, status_message, last_refresh)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)
+                "INSERT INTO auth_files (account_key, name, type, provider, auth_index, metadata, attributes, id_token, plan_type, account, runtime_only, size, disabled, unavailable, status, status_message, last_refresh)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)
                  ON CONFLICT(account_key, name) DO UPDATE SET
                    type = excluded.type,
                    provider = excluded.provider,
+                   auth_index = excluded.auth_index,
+                   metadata = excluded.metadata,
+                   attributes = excluded.attributes,
+                   id_token = excluded.id_token,
+                   plan_type = excluded.plan_type,
+                   account = excluded.account,
+                   runtime_only = excluded.runtime_only,
                    size = excluded.size,
                    disabled = excluded.disabled,
                    unavailable = excluded.unavailable,
@@ -301,6 +408,13 @@ impl Db {
             .bind(&f.name)
             .bind(&f.file_type)
             .bind(&f.provider)
+            .bind(&f.auth_index)
+            .bind(json_to_string(&f.metadata))
+            .bind(json_to_string(&f.attributes))
+            .bind(json_to_string(&f.id_token))
+            .bind(&f.plan_type)
+            .bind(&f.account)
+            .bind(if f.runtime_only.unwrap_or(false) { 1 } else { 0 })
             .bind(f.size)
             .bind(if f.disabled.unwrap_or(false) { 1 } else { 0 })
             .bind(if f.unavailable.unwrap_or(false) { 1 } else { 0 })
@@ -317,7 +431,7 @@ impl Db {
     }
 
     pub async fn list_auth_files(&self, account_key: &str) -> Result<Vec<AuthFileRow>, String> {
-        let rows = sqlx::query("SELECT id, name, type, provider, size, disabled, unavailable, status, status_message, last_refresh FROM auth_files WHERE account_key = ?1 ORDER BY name")
+        let rows = sqlx::query("SELECT id, name, type, provider, auth_index, metadata, attributes, id_token, plan_type, account, runtime_only, size, disabled, unavailable, status, status_message, last_refresh FROM auth_files WHERE account_key = ?1 AND name IS NOT NULL AND trim(name) <> '' ORDER BY name")
             .bind(account_key)
             .fetch_all(&self.pool).await.map_err(|e| format!("读取认证文件失败: {e}"))?;
         Ok(rows.iter().map(|r| AuthFileRow {
@@ -325,6 +439,13 @@ impl Db {
             name: r.try_get("name").unwrap_or_default(),
             file_type: r.try_get("type").ok(),
             provider: r.try_get("provider").ok(),
+            auth_index: r.try_get("auth_index").ok(),
+            metadata: string_to_json(r.try_get::<Option<String>, _>("metadata").ok().flatten()),
+            attributes: string_to_json(r.try_get::<Option<String>, _>("attributes").ok().flatten()),
+            id_token: string_to_json(r.try_get::<Option<String>, _>("id_token").ok().flatten()),
+            plan_type: r.try_get("plan_type").ok(),
+            account: r.try_get("account").ok(),
+            runtime_only: Some(r.try_get::<i32, _>("runtime_only").unwrap_or(0) != 0),
             size: r.try_get("size").ok(),
             disabled: Some(r.try_get::<i32, _>("disabled").unwrap_or(0) != 0),
             unavailable: Some(r.try_get::<i32, _>("unavailable").unwrap_or(0) != 0),
@@ -332,6 +453,15 @@ impl Db {
             status_message: r.try_get("status_message").ok(),
             last_refresh: r.try_get("last_refresh").ok(),
         }).collect())
+    }
+
+    pub async fn clear_auth_files(&self, account_key: &str) -> Result<(), String> {
+        sqlx::query("DELETE FROM auth_files WHERE account_key = ?1")
+            .bind(account_key)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| format!("清理认证文件缓存失败: {e}"))?;
+        Ok(())
     }
 }
 
@@ -392,6 +522,13 @@ async fn ensure_schema(pool: &SqlitePool) -> Result<(), String> {
             name TEXT NOT NULL,
             type TEXT,
             provider TEXT,
+            auth_index TEXT,
+            metadata TEXT,
+            attributes TEXT,
+            id_token TEXT,
+            plan_type TEXT,
+            account TEXT,
+            runtime_only INTEGER NOT NULL DEFAULT 0,
             size INTEGER,
             disabled INTEGER NOT NULL DEFAULT 0,
             unavailable INTEGER NOT NULL DEFAULT 0,
@@ -410,6 +547,13 @@ async fn ensure_schema(pool: &SqlitePool) -> Result<(), String> {
         pool,
         "auth_files",
         &[
+            ("auth_index", "TEXT"),
+            ("metadata", "TEXT"),
+            ("attributes", "TEXT"),
+            ("id_token", "TEXT"),
+            ("plan_type", "TEXT"),
+            ("account", "TEXT"),
+            ("runtime_only", "INTEGER NOT NULL DEFAULT 0"),
             ("unavailable", "INTEGER NOT NULL DEFAULT 0"),
             ("status", "TEXT"),
             ("status_message", "TEXT"),
@@ -417,6 +561,10 @@ async fn ensure_schema(pool: &SqlitePool) -> Result<(), String> {
         ],
     )
     .await?;
+
+    let _ = sqlx::query("DELETE FROM auth_files WHERE name IS NULL OR trim(name) = ''")
+        .execute(pool)
+        .await;
 
     Ok(())
 }
@@ -479,6 +627,13 @@ mod tests {
             for col in [
                 "id",
                 "account_key",
+                "auth_index",
+                "metadata",
+                "attributes",
+                "id_token",
+                "plan_type",
+                "account",
+                "runtime_only",
                 "unavailable",
                 "status",
                 "status_message",

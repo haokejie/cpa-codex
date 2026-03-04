@@ -18,7 +18,11 @@ function normalizeAuthFile(item: RawAuthFileItem): AuthFileItem {
 export async function listAuthFiles(): Promise<AuthFileItem[]> {
   if (!isTauri()) return mock.listAuthFiles();
   const items = await (await getInvoke())("list_auth_files");
-  return Array.isArray(items) ? items.map(normalizeAuthFile) : [];
+  if (!Array.isArray(items)) return [];
+  return items
+    .filter((item) => item && typeof item === "object")
+    .map(normalizeAuthFile)
+    .filter((item) => typeof item.name === "string" && item.name.trim().length > 0);
 }
 
 export async function setAuthFileStatus(name: string, disabled: boolean): Promise<void> {
@@ -34,6 +38,11 @@ export async function deleteAuthFile(name: string): Promise<void> {
 export async function deleteAllAuthFiles(): Promise<void> {
   if (!isTauri()) return;
   return (await getInvoke())("delete_all_auth_files");
+}
+
+export async function resetAuthFilesCache(): Promise<void> {
+  if (!isTauri()) return;
+  return (await getInvoke())("reset_auth_files_cache");
 }
 
 export async function syncAuthFiles(): Promise<void> {

@@ -1,4 +1,25 @@
-import type { Account, AppConfig, AuthFileItem, CodexConfig, CommandResult } from "../types";
+import type {
+  Account,
+  AmpcodeConfig,
+  AmpcodeModelMapping,
+  ApiCallResult,
+  AppConfig,
+  AuthFileItem,
+  CodexConfig,
+  CommandResult,
+  ErrorLogsResponse,
+  GeminiKeyConfig,
+  LogsResponse,
+  OAuthCallbackResponse,
+  OAuthStartResponse,
+  OAuthStatusResponse,
+  OpenAIProviderConfig,
+  ProviderKeyConfig,
+  ServerConfig,
+  UsageExportPayload,
+  UsageImportResponse,
+  VertexImportResponse,
+} from "../types";
 
 // Account mocks
 export async function login(): Promise<CommandResult> {
@@ -188,3 +209,127 @@ export async function listAuthFiles(): Promise<AuthFileItem[]> {
 export async function uploadAuthFile(_file: File): Promise<void> {
   return;
 }
+
+// Server config mocks
+export async function getServerConfig(): Promise<ServerConfig> {
+  return { debug: false, requestRetry: 0, usageStatisticsEnabled: true };
+}
+
+export async function getServerRawConfig(): Promise<Record<string, unknown>> {
+  return {};
+}
+
+export async function updateDebug(): Promise<void> {}
+export async function updateProxyUrl(): Promise<void> {}
+export async function clearProxyUrl(): Promise<void> {}
+export async function updateRequestRetry(): Promise<void> {}
+export async function updateSwitchProject(): Promise<void> {}
+export async function updateSwitchPreviewModel(): Promise<void> {}
+export async function updateUsageStatistics(): Promise<void> {}
+export async function updateRequestLog(): Promise<void> {}
+export async function updateLoggingToFile(): Promise<void> {}
+export async function getLogsMaxTotalSizeMb(): Promise<number> { return 0; }
+export async function updateLogsMaxTotalSizeMb(): Promise<void> {}
+export async function updateWsAuth(): Promise<void> {}
+export async function getForceModelPrefix(): Promise<boolean> { return false; }
+export async function updateForceModelPrefix(): Promise<void> {}
+export async function getRoutingStrategy(): Promise<string> { return "round-robin"; }
+export async function updateRoutingStrategy(): Promise<void> {}
+
+// Providers mocks
+export async function getGeminiConfigs(): Promise<GeminiKeyConfig[]> { return []; }
+export async function saveGeminiConfigs(): Promise<void> {}
+export async function updateGeminiConfig(): Promise<void> {}
+export async function deleteGeminiConfig(): Promise<void> {}
+export async function getCodexProviderConfigs(): Promise<ProviderKeyConfig[]> { return []; }
+export async function saveCodexProviderConfigs(): Promise<void> {}
+export async function updateCodexProviderConfig(): Promise<void> {}
+export async function deleteCodexProviderConfig(): Promise<void> {}
+export async function getClaudeConfigs(): Promise<ProviderKeyConfig[]> { return []; }
+export async function saveClaudeConfigs(): Promise<void> {}
+export async function updateClaudeConfig(): Promise<void> {}
+export async function deleteClaudeConfig(): Promise<void> {}
+export async function getVertexConfigs(): Promise<ProviderKeyConfig[]> { return []; }
+export async function saveVertexConfigs(): Promise<void> {}
+export async function updateVertexConfig(): Promise<void> {}
+export async function deleteVertexConfig(): Promise<void> {}
+export async function getOpenAIProviders(): Promise<OpenAIProviderConfig[]> { return []; }
+export async function saveOpenAIProviders(): Promise<void> {}
+export async function updateOpenAIProvider(): Promise<void> {}
+export async function deleteOpenAIProvider(): Promise<void> {}
+
+// OAuth mocks
+export async function startOAuth(): Promise<OAuthStartResponse> {
+  return { url: "https://example.com/oauth" };
+}
+export async function getAuthStatus(): Promise<OAuthStatusResponse> {
+  return { status: "wait" };
+}
+export async function submitOAuthCallback(): Promise<OAuthCallbackResponse> {
+  return { status: "ok" };
+}
+export async function iflowCookieAuth(): Promise<{ status: "ok" }> {
+  return { status: "ok" };
+}
+
+// Vertex import mock
+export async function importVertexCredential(): Promise<VertexImportResponse> {
+  return { status: "ok", project_id: "demo-project", email: "demo@example.com", location: "us-central1", "auth-file": "vertex_auth.json" };
+}
+
+// AuthFiles advanced mocks
+export async function downloadAuthFileText(): Promise<string> { return "{}"; }
+export async function getOauthExcludedModels(): Promise<Record<string, string[]>> { return {}; }
+export async function saveOauthExcludedModels(): Promise<void> {}
+export async function deleteOauthExcludedEntry(): Promise<void> {}
+export async function replaceOauthExcludedModels(): Promise<void> {}
+export async function getOauthModelAlias(): Promise<Record<string, { name: string; alias: string }[]>> { return {}; }
+export async function saveOauthModelAlias(): Promise<void> {}
+export async function deleteOauthModelAlias(): Promise<void> {}
+export async function getModelsForAuthFile(): Promise<{ id: string }[]> { return []; }
+export async function getModelDefinitions(): Promise<{ id: string }[]> { return []; }
+
+// Usage mocks
+export async function getUsageRaw(): Promise<Record<string, unknown>> { return {}; }
+export async function exportUsage(): Promise<UsageExportPayload> { return {}; }
+export async function importUsage(): Promise<UsageImportResponse> { return {}; }
+
+// Logs mocks
+export async function fetchLogs(): Promise<LogsResponse> {
+  return { lines: [], "line-count": 0, "latest-timestamp": 0 };
+}
+export async function clearLogs(): Promise<void> {}
+export async function fetchErrorLogs(): Promise<ErrorLogsResponse> { return { files: [] }; }
+export async function downloadErrorLog(): Promise<Uint8Array> { return new Uint8Array(); }
+export async function downloadRequestLogById(): Promise<Uint8Array> { return new Uint8Array(); }
+
+// Config file mocks
+export async function fetchConfigYaml(): Promise<string> { return ""; }
+export async function saveConfigYaml(): Promise<void> {}
+
+// Models mocks
+export async function fetchModels(): Promise<unknown> { return []; }
+export async function fetchModelsViaApiCall(): Promise<ApiCallResult> {
+  return { statusCode: 200, header: {}, bodyText: "", body: [] };
+}
+
+// API call mock
+export async function apiCall(): Promise<ApiCallResult> {
+  return { statusCode: 200, header: {}, bodyText: "", body: null };
+}
+
+// Ampcode mocks
+export async function getAmpcode(): Promise<AmpcodeConfig> { return {}; }
+export async function updateUpstreamUrl(): Promise<void> {}
+export async function clearUpstreamUrl(): Promise<void> {}
+export async function updateUpstreamApiKey(): Promise<void> {}
+export async function clearUpstreamApiKey(): Promise<void> {}
+export async function getAmpcodeModelMappings(): Promise<AmpcodeModelMapping[]> { return []; }
+export async function saveAmpcodeModelMappings(): Promise<void> {}
+export async function patchAmpcodeModelMappings(): Promise<void> {}
+export async function clearAmpcodeModelMappings(): Promise<void> {}
+export async function deleteAmpcodeModelMappings(): Promise<void> {}
+export async function updateForceModelMappings(): Promise<void> {}
+
+// Version mock
+export async function checkLatestVersion(): Promise<Record<string, unknown>> { return {}; }
