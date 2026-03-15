@@ -240,15 +240,8 @@ class CodexMonitorState {
     try {
       const items = await listAuthFiles();
       const filtered = items.filter((file) => this.isCodexFile(file) && !this.isRuntimeOnly(file));
-      if (filtered.length === 0 && this.monitorFilesBackup.value.length > 0) {
-        this.poolWarning.value = "账号池为空，已保留上次监控列表";
-        this.monitorFiles.value = this.monitorFilesBackup.value;
-        return this.monitorFiles.value;
-      }
       this.monitorFiles.value = filtered;
-      if (filtered.length > 0) {
-        this.monitorFilesBackup.value = filtered;
-      }
+      this.monitorFilesBackup.value = filtered;
       return filtered;
     } catch (err) {
       if (this.monitorFilesBackup.value.length > 0) {
