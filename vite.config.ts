@@ -3,6 +3,7 @@ import vue from "@vitejs/plugin-vue";
 
 // @ts-expect-error process is a nodejs global
 const host = process.env.TAURI_DEV_HOST;
+const managementProxyTarget = process.env.VITE_MANAGEMENT_PROXY_TARGET;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
@@ -26,6 +27,15 @@ export default defineConfig(async () => ({
           protocol: "ws",
           host,
           port: 1421,
+        }
+      : undefined,
+    proxy: managementProxyTarget
+      ? {
+          "/v0/management": {
+            target: managementProxyTarget,
+            changeOrigin: true,
+            secure: false,
+          },
         }
       : undefined,
     watch: {

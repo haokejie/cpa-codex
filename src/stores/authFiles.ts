@@ -1,7 +1,7 @@
 import { defineStore } from "pinia";
 import { ref } from "vue";
 import type { AuthFileItem } from "../types";
-import { listAuthFiles, syncAuthFiles, setAuthFileStatus, deleteAuthFile, deleteAllAuthFiles, uploadAuthFile } from "../api/authFiles";
+import { listAuthFiles, setAuthFileStatus, deleteAuthFile, deleteAllAuthFiles, uploadAuthFile } from "../api/authFiles";
 
 export const useAuthFilesStore = defineStore("authFiles", () => {
   const files = ref<AuthFileItem[]>([]);
@@ -9,18 +9,25 @@ export const useAuthFilesStore = defineStore("authFiles", () => {
   const error = ref<string | null>(null);
   const uploading = ref(false);
   const uploadError = ref<string | null>(null);
+  const lastFetchedAt = ref(0);
 
   async function fetchFiles() {
     loading.value = true;
     error.value = null;
     try {
-      await syncAuthFiles();
       files.value = await listAuthFiles();
+      lastFetchedAt.value = Date.now();
     } catch (e) {
       error.value = String(e);
     } finally {
       loading.value = false;
     }
+  }
+
+  async function ensureFiles() {
+    if (loading.value) return;
+    if (lastFetchedAt.value > 0) return;
+    await fetchFiles();
   }
 
   function setUploadError(message: string | null) {
@@ -82,13 +89,25 @@ export const useAuthFilesStore = defineStore("authFiles", () => {
     files.value = [];
   }
 
+  function reset() {
+    files.value = [];
+    error.value = null;
+    uploadError.value = null;
+    loading.value = false;
+    uploading.value = false;
+    lastFetchedAt.value = 0;
+  }
+
   return {
     files,
     loading,
     error,
     uploading,
     uploadError,
+    lastFetchedAt,
     fetchFiles,
+    ensureFiles,
+    reset,
     setUploadError,
     uploadFiles,
     toggleDisabled,

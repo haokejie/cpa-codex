@@ -1,6 +1,6 @@
 import type { AuthFileItem } from "../types";
-import { isTauri, getInvoke } from "./tauri";
-import * as mock from "./mock";
+import { buildManagementUrl, requestJson, requestOk } from "./managementClient";
+import { requireSession } from "./session";
 
 type RawAuthFileItem = AuthFileItem & {
   status_message?: string;
@@ -16,33 +16,55 @@ function normalizeAuthFile(item: RawAuthFileItem): AuthFileItem {
 }
 
 export async function listAuthFiles(): Promise<AuthFileItem[]> {
-  if (!isTauri()) return mock.listAuthFiles();
-  const items = await (await getInvoke())("list_auth_files");
-  return Array.isArray(items) ? items.map(normalizeAuthFile) : [];
+  const session = requireSession();
+  const url = buildManagementUrl(session.server, "/auth-files");
+  const body = await requestJson<unknown>(url, { auth: session.password, context: "management" });
+  const items = extractFiles(body);
+  return items.map(normalizeAuthFile);
 }
 
 export async function setAuthFileStatus(name: string, disabled: boolean): Promise<void> {
-  if (!isTauri()) return;
-  return (await getInvoke())("set_auth_file_status", { name, disabled });
+  const session = requireSession();
+  const url = buildManagementUrl(session.server, "/auth-files/status");
+  await requestOk(url, {
+    method: "PATCH",
+    auth: session.password,
+    body: { name, disabled },
+    context: "management",
+  });
 }
 
 export async function deleteAuthFile(name: string): Promise<void> {
-  if (!isTauri()) return;
-  return (await getInvoke())("delete_auth_file", { name });
+  const session = requireSession();
+  const url = `${buildManagementUrl(session.server, "/auth-files")}?name=${encodeURIComponent(name)}`;
+  await requestOk(url, { method: "DELETE", auth: session.password, context: "management" });
 }
 
 export async function deleteAllAuthFiles(): Promise<void> {
-  if (!isTauri()) return;
-  return (await getInvoke())("delete_all_auth_files");
-}
-
-export async function syncAuthFiles(): Promise<void> {
-  if (!isTauri()) return;
-  return (await getInvoke())("sync_auth_files");
+  const session = requireSession();
+  const url = `${buildManagementUrl(session.server, "/auth-files")}?all=true`;
+  await requestOk(url, { method: "DELETE", auth: session.password, context: "management" });
 }
 
 export async function uploadAuthFile(file: File): Promise<void> {
-  if (!isTauri()) return mock.uploadAuthFile(file);
-  const bytes = new Uint8Array(await file.arrayBuffer());
-  return (await getInvoke())("upload_auth_file", { name: file.name, bytes: Array.from(bytes) });
+  const session = requireSession();
+  const url = buildManagementUrl(session.server, "/auth-files");
+  const form = new FormData();
+  form.append("file", file, file.name);
+  await requestOk(url, {
+    method: "POST",
+    auth: session.password,
+    body: form,
+    context: "management",
+  });
+}
+
+function extractFiles(body: unknown): RawAuthFileItem[] {
+  if (Array.isArray(body)) return body as RawAuthFileItem[];
+  if (body && typeof body === "object") {
+    const obj = body as Record<string, unknown>;
+    const files = obj.files;
+    if (Array.isArray(files)) return files as RawAuthFileItem[];
+  }
+  return [];
 }

@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <!-- Dark rounded square background with ~10% macOS-standard padding -->
-  <rect x="50" y="50" width="412" height="412" rx="90" fill="#18181B"/>
-  <!-- Bold white C arc with round caps (scaled to 80% and centered) -->
-  <path d="M 321 190 A 98 98 0 1 0 321 322"
-        stroke="#FFFFFF" stroke-width="42" fill="none" stroke-linecap="round"/>
-</svg>

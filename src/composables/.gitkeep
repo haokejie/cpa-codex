@@ -1,2 +1,0 @@
-# Vue composables 目录，存放可复用的业务逻辑
-# 例：src/composables/useBackendTick.ts（监听 backend:tick 事件）

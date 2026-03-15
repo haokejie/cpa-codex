@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { onMounted, computed, ref, watch } from "vue";
+import { onMounted, computed, ref } from "vue";
 import { useConfigStore } from "../stores/config";
 import { useAuthStore } from "../stores/auth";
 import { useCodexStore } from "../stores/codex";
-import { AUTO_REFRESH_MAX_SECONDS, AUTO_REFRESH_MIN_SECONDS, normalizeAutoRefreshIntervalSeconds } from "../utils/autoRefresh";
-import CodexAccountCard from "./CodexAccountCard.vue";
+import CodexQuotaCard from "./CodexQuotaCard.vue";
 import UsageStatsCard from "./UsageStatsCard.vue";
 import ServiceHealthCard from "./ServiceHealthCard.vue";
 import CredentialStatsCard from "./CredentialStatsCard.vue";
@@ -12,6 +11,7 @@ import RequestEventsDetailsCard from "./RequestEventsDetailsCard.vue";
 import AuthFilesCard from "./AuthFilesCard.vue";
 import ApiDetailsCard from "./ApiDetailsCard.vue";
 import ApiKeysCard from "./ApiKeysCard.vue";
+import CodexMonitorCard from "./CodexMonitorCard.vue";
 import BaseCard from "./BaseCard.vue";
 
 const configStore = useConfigStore();
@@ -21,19 +21,18 @@ const codexStore = useCodexStore();
 onMounted(() => {
   configStore.refresh();
   codexStore.fetchConfigs();
-  codexStore.refreshQuotas();
 });
 
-type TabKey = 'codex' | 'auth' | 'api-keys' | 'usage' | 'api-details' | 'settings';
+type TabKey = 'quota' | 'auth' | 'api-keys' | 'usage' | 'api-details' | 'monitor' | 'settings';
 const activeTab = ref<TabKey>('auth');
-const autoRefreshSecondsInput = ref('');
-const autoRefreshError = ref('');
 
 const mainTabs: { key: TabKey; label: string }[] = [
+  { key: 'quota', label: '额度' },
   { key: 'auth', label: '认证' },
   { key: 'api-keys', label: '密钥' },
   { key: 'usage', label: '统计' },
   { key: 'api-details', label: 'API 明细' },
+  { key: 'monitor', label: '监控' },
 ];
 
 const accountLabel = computed(() => {
@@ -41,32 +40,6 @@ const accountLabel = computed(() => {
   if (!account) return "未知";
   return account.server;
 });
-
-watch(
-  () => configStore.config?.auto_refresh_interval_seconds,
-  (value) => {
-    if (value !== undefined && value !== null) {
-      autoRefreshSecondsInput.value = String(value);
-    }
-  },
-  { immediate: true },
-);
-
-async function saveAutoRefreshInterval() {
-  autoRefreshError.value = "";
-  const parsed = Number(autoRefreshSecondsInput.value);
-  if (!Number.isFinite(parsed)) {
-    autoRefreshError.value = "请输入有效的刷新间隔";
-    return;
-  }
-  const normalized = normalizeAutoRefreshIntervalSeconds(parsed);
-  autoRefreshSecondsInput.value = String(normalized);
-  try {
-    await configStore.updateAutoRefreshIntervalSeconds(normalized);
-  } catch {
-    // 错误由 configStore.error 展示
-  }
-}
 </script>
 
 <template>
@@ -109,12 +82,13 @@ async function saveAutoRefreshInterval() {
           :class="{ 'nav-active': activeTab === t.key }"
           @click="activeTab = t.key"
         >
-          <svg v-if="t.key === 'codex'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
-            <line x1="3" y1="6" x2="3.01" y2="6"/><line x1="3" y1="12" x2="3.01" y2="12"/><line x1="3" y1="18" x2="3.01" y2="18"/>
-          </svg>
-          <svg v-else-if="t.key === 'auth'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <svg v-if="t.key === 'auth'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>
+          </svg>
+          <svg v-else-if="t.key === 'quota'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2v2"/><path d="M12 20v2"/><path d="M4.93 4.93l1.41 1.41"/><path d="M17.66 17.66l1.41 1.41"/>
+            <path d="M2 12h2"/><path d="M20 12h2"/><path d="M4.93 19.07l1.41-1.41"/><path d="M17.66 6.34l1.41-1.41"/>
+            <circle cx="12" cy="12" r="4"/>
           </svg>
           <svg v-else-if="t.key === 'api-keys'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <circle cx="7.5" cy="14.5" r="3.5"/>
@@ -125,6 +99,10 @@ async function saveAutoRefreshInterval() {
           </svg>
           <svg v-else-if="t.key === 'api-details'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 4h16v4H4z"/><path d="M4 10h16v4H4z"/><path d="M4 16h10v4H4z"/>
+          </svg>
+          <svg v-else-if="t.key === 'monitor'" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 14h2l2 3 4-8 3 5h5"/>
+            <path d="M3 3v18h18"/>
           </svg>
           <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/>
@@ -146,8 +124,8 @@ async function saveAutoRefreshInterval() {
 
       <main class="content">
         <div class="content-inner">
-          <!-- Codex 账号 -->
-          <CodexAccountCard v-if="activeTab === 'codex'" />
+          <!-- Codex 额度 -->
+          <CodexQuotaCard v-if="activeTab === 'quota'" />
 
           <!-- 认证文件 -->
           <AuthFilesCard v-if="activeTab === 'auth'" />
@@ -167,6 +145,9 @@ async function saveAutoRefreshInterval() {
           <template v-if="activeTab === 'api-details'">
             <ApiDetailsCard />
           </template>
+
+          <!-- Codex 监控 -->
+          <CodexMonitorCard v-if="activeTab === 'monitor'" />
 
           <!-- 设置 -->
           <template v-if="activeTab === 'settings'">
@@ -258,57 +239,6 @@ async function saveAutoRefreshInterval() {
                   {{ configStore.config?.dock_visible_on_minimize ? "关闭" : "开启" }}
                 </button>
               </div>
-            </BaseCard>
-
-            <BaseCard title="自动刷新" description="定时刷新认证文件列表" headerGap="lg">
-              <div class="setting-row">
-                <div class="setting-info">
-                  <div class="setting-name">列表自动刷新</div>
-                  <div class="setting-value">
-                    当前：
-                    <span v-if="configStore.config" :class="configStore.config.auto_refresh_enabled ? 'status-on' : 'status-off'">
-                      {{ configStore.config.auto_refresh_enabled ? "已开启" : "已关闭" }}
-                    </span>
-                    <span v-else class="status-muted">加载中...</span>
-                  </div>
-                </div>
-                <button
-                  class="btn-action"
-                  :class="{ 'btn-action-on': configStore.config?.auto_refresh_enabled }"
-                  :disabled="configStore.working || !configStore.config"
-                  @click="configStore.toggleAutoRefresh"
-                >
-                  {{ configStore.config?.auto_refresh_enabled ? "关闭刷新" : "开启刷新" }}
-                </button>
-              </div>
-              <div class="setting-row">
-                <div class="setting-info">
-                  <div class="setting-name">刷新间隔（秒）</div>
-                  <div class="setting-value">
-                    当前：
-                    <span v-if="configStore.config">{{ configStore.config.auto_refresh_interval_seconds }} 秒</span>
-                    <span v-else class="status-muted">加载中...</span>
-                  </div>
-                </div>
-                <div class="setting-actions">
-                  <input
-                    class="setting-input"
-                    v-model="autoRefreshSecondsInput"
-                    type="number"
-                    :min="AUTO_REFRESH_MIN_SECONDS"
-                    :max="AUTO_REFRESH_MAX_SECONDS"
-                    :disabled="configStore.working || !configStore.config"
-                  />
-                  <button
-                    class="btn-action"
-                    :disabled="configStore.working || !configStore.config"
-                    @click="saveAutoRefreshInterval"
-                  >
-                    保存
-                  </button>
-                </div>
-              </div>
-              <p v-if="autoRefreshError" class="error-msg">{{ autoRefreshError }}</p>
             </BaseCard>
 
             <p v-if="configStore.error" class="error-msg">{{ configStore.error }}</p>

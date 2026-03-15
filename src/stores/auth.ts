@@ -9,6 +9,8 @@ import {
   deleteAccount as deleteAccountApi,
 } from "../api/account";
 import type { Account, LoginPayload } from "../types";
+import { clearSession } from "../api/session";
+import { useAuthFilesStore } from "./authFiles";
 
 export type AuthMode = "prompt" | "list" | "form" | "config";
 
@@ -20,6 +22,7 @@ export const useAuthStore = defineStore("auth", () => {
   const loading = ref(false);
   const error = ref("");
   const rememberPassword = ref(true);
+  const authFilesStore = useAuthFilesStore();
 
   const hasAccounts = computed(() => accounts.value.length > 0);
 
@@ -64,6 +67,8 @@ export const useAuthStore = defineStore("auth", () => {
 
   function switchAccount() {
     currentAccount.value = null;
+    clearSession();
+    authFilesStore.reset();
     mode.value = accounts.value.length > 0 ? "list" : "form";
   }
 
@@ -123,6 +128,8 @@ export const useAuthStore = defineStore("auth", () => {
   function logout() {
     currentAccount.value = null;
     error.value = "";
+    clearSession();
+    authFilesStore.reset();
     mode.value = accounts.value.length > 0 ? "list" : "form";
   }
 
@@ -134,6 +141,7 @@ export const useAuthStore = defineStore("auth", () => {
       await refreshAccounts();
       if (currentAccount.value?.account_key === account.account_key) {
         currentAccount.value = null;
+        clearSession();
       }
       if (mode.value === "config") {
         mode.value = accounts.value.length > 0 ? "list" : "form";

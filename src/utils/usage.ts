@@ -293,7 +293,7 @@ const extractRawSecretFromText = (text: string): string | null => {
   return null;
 };
 
-export function normalizeUsageSourceId(value: unknown): string {
+function normalizeUsageSourceId(value: unknown): string {
   const raw = typeof value === "string" ? value : value === null || value === undefined ? "" : String(value);
   const trimmed = raw.trim();
   if (!trimmed) return "";
@@ -478,10 +478,6 @@ export function summarizeTokensFromDetails(raw: unknown, details: UsageDetail[])
   return summarizeTokensFromDetailList(details);
 }
 
-export function summarizeTokens(raw: unknown): UsageTokens {
-  return summarizeTokensFromDetails(raw, collectUsageDetails(raw));
-}
-
 export function calculateRecentRatesFromDetails(
   details: UsageDetail[],
   windowMinutes = 30,
@@ -515,52 +511,6 @@ export function calculateRecentRatesFromDetails(
     tokenCount,
     hasData: true,
   };
-}
-
-export function calculateRecentRates(raw: unknown, windowMinutes = 30, nowMs?: number): UsageRates {
-  return calculateRecentRatesFromDetails(collectUsageDetails(raw), windowMinutes, nowMs);
-}
-
-export function buildHourlySeries(raw: unknown, hours = 24, nowMs?: number): UsageSparklineSeries {
-  const details = collectUsageDetails(raw);
-  const windowHours = Number.isFinite(hours) && hours > 0 ? Math.floor(hours) : 24;
-  const now = Number.isFinite(nowMs) && (nowMs as number) > 0 ? (nowMs as number) : Date.now();
-  const hourMs = 60 * 60 * 1000;
-  const windowStart = now - windowHours * hourMs;
-  const requests = new Array(windowHours).fill(0);
-  const tokens = new Array(windowHours).fill(0);
-  let used = false;
-
-  details.forEach((detail) => {
-    const timestamp = detail.__timestampMs;
-    if (!Number.isFinite(timestamp) || timestamp < windowStart || timestamp > now) {
-      return;
-    }
-    const hourIndex = Math.min(
-      windowHours - 1,
-      Math.floor((timestamp - windowStart) / hourMs),
-    );
-    requests[hourIndex] += 1;
-    tokens[hourIndex] += extractTotalTokens(detail);
-    used = true;
-  });
-
-  const labels = requests.map((_, idx) => {
-    const date = new Date(windowStart + (idx + 1) * hourMs);
-    const h = date.getHours().toString().padStart(2, "0");
-    return `${h}:00`;
-  });
-
-  return {
-    labels,
-    requests,
-    tokens,
-    hasData: used,
-  };
-}
-
-export function buildMinuteSeries(raw: unknown, minutes = 60, nowMs?: number): UsageSparklineSeries {
-  return buildMinuteSeriesFromDetails(collectUsageDetails(raw), minutes, nowMs);
 }
 
 export function buildMinuteSeriesFromDetails(

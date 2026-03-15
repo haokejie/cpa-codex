@@ -4,17 +4,21 @@ export type AppConfig = {
   tray_enabled: boolean;
   close_to_tray: boolean;
   dock_visible_on_minimize: boolean;
-  auto_refresh_enabled: boolean;
-  auto_refresh_interval_seconds: number;
 };
 
-// 与 src-tauri/src/db.rs Account 对应
+// 本地账号存储结构
 export type Account = {
   account_key: string;
   server: string;
   last_login_at: number;
   remember_password: boolean;
   has_password: boolean;
+};
+
+export type Session = {
+  account_key: string;
+  server: string;
+  password: string;
 };
 
 // Codex 账号配置（与 ProviderKeyConfig 对应）
@@ -42,24 +46,6 @@ export type CodexConfig = {
   models?: CodexModelAlias[];
   excludedModels?: string[];
   cloak?: CodexCloakConfig;
-};
-
-// Codex 额度窗口
-export type CodexQuotaWindow = {
-  label: string;
-  usedPercent: number;
-  limitWindowSeconds: number;
-  resetAfterSeconds: number;
-};
-
-// Codex 额度状态
-export type CodexQuotaState = {
-  status: 'idle' | 'loading' | 'success' | 'error';
-  allowed: boolean;
-  limitReached: boolean;
-  windows: CodexQuotaWindow[];
-  planType?: string;
-  error?: string;
 };
 
 // 使用统计
@@ -147,6 +133,25 @@ export type AuthFileItem = {
   statusMessage?: string;
   lastRefresh?: string | number;
   runtimeOnly?: boolean;
+  plan_type?: string;
+  planType?: string;
+  id_token?: unknown;
+  metadata?: Record<string, unknown>;
+  attributes?: Record<string, unknown>;
+};
+
+export type CodexAuthQuotaWindow = {
+  id: string;
+  label: string;
+  usedPercent: number | null;
+  resetLabel: string;
+};
+
+export type CodexAuthQuotaState = {
+  status: "idle" | "loading" | "success" | "error";
+  windows: CodexAuthQuotaWindow[];
+  planType?: string | null;
+  error?: string;
 };
 
 // 与 src-tauri/src/commands.rs LoginPayload 对应

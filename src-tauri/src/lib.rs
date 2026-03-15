@@ -1,10 +1,5 @@
-mod background;
-mod auth;
 mod commands;
 mod config;
-mod crypto;
-mod db;
-mod remote;
 mod state;
 mod tray;
 
@@ -29,8 +24,7 @@ pub fn run() {
             let app_handle = app.handle().clone();
             let state = tauri::async_runtime::block_on(async {
                 let config = crate::config::ConfigStore::load(&app_handle)?;
-                let db = crate::db::Db::new(&app_handle).await?;
-                Ok::<AppState, String>(AppState { config, db })
+                Ok::<AppState, String>(AppState { config })
             })
             .map_err(std::io::Error::other)?;
 
@@ -42,7 +36,6 @@ pub fn run() {
             {
                 let _ = app_handle.set_activation_policy(ActivationPolicy::Regular);
             }
-            crate::background::start_background_worker(app_handle);
             Ok(())
         })
         .on_window_event(|window, event| {
@@ -74,31 +67,7 @@ pub fn run() {
             commands::set_autostart_enabled,
             commands::set_tray_enabled,
             commands::set_close_to_tray,
-            commands::set_dock_visible_on_minimize,
-            commands::set_auto_refresh_enabled,
-            commands::set_auto_refresh_interval_seconds,
-            commands::login,
-            commands::list_accounts,
-            commands::delete_account,
-            commands::has_saved_password,
-            commands::login_with_saved_password,
-            commands::get_last_account_key,
-            commands::get_codex_configs,
-            commands::save_codex_configs,
-            commands::update_codex_config,
-            commands::delete_codex_config,
-            commands::list_api_keys,
-            commands::replace_api_keys,
-            commands::update_api_key,
-            commands::delete_api_key,
-            commands::get_codex_quota,
-            commands::get_usage,
-            commands::list_auth_files,
-            commands::sync_auth_files,
-            commands::upload_auth_file,
-            commands::set_auth_file_status,
-            commands::delete_auth_file,
-            commands::delete_all_auth_files
+            commands::set_dock_visible_on_minimize
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application")

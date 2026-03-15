@@ -1,7 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onMounted } from "vue";
 import { storeToRefs } from "pinia";
-import { listAuthFiles } from "../api/authFiles";
 import { useCodexStore } from "../stores/codex";
 import type { AuthFileItem } from "../types";
 import BaseCard from "./BaseCard.vue";
@@ -12,29 +11,30 @@ import {
   normalizeAuthIndex,
 } from "../utils/usage";
 import { buildSourceInfoMap, resolveSourceDisplay, type CredentialInfo } from "../utils/sourceResolver";
+import { useAuthFilesStore } from "../stores/authFiles";
 
 const store = useCodexStore();
 const { configs, usageRaw, usageLoading } = storeToRefs(store);
-const authFileMap = ref<Map<string, CredentialInfo>>(new Map());
+const authFilesStore = useAuthFilesStore();
+const { files: authFiles } = storeToRefs(authFilesStore);
 
-onMounted(async () => {
-  try {
-    const files = await listAuthFiles();
-    const map = new Map<string, CredentialInfo>();
-    files.forEach((file: AuthFileItem) => {
-      const rawAuthIndex = file.auth_index ?? file.authIndex;
-      const key = normalizeAuthIndex(rawAuthIndex);
-      if (key) {
-        map.set(key, {
-          name: file.name || key,
-          type: (file.type || file.provider || "").toString(),
-        });
-      }
-    });
-    authFileMap.value = map;
-  } catch {
-    /* ignore */
-  }
+onMounted(() => {
+  authFilesStore.ensureFiles();
+});
+
+const authFileMap = computed(() => {
+  const map = new Map<string, CredentialInfo>();
+  (authFiles.value ?? []).forEach((file: AuthFileItem) => {
+    const rawAuthIndex = file.auth_index ?? file.authIndex;
+    const key = normalizeAuthIndex(rawAuthIndex);
+    if (key) {
+      map.set(key, {
+        name: file.name || key,
+        type: (file.type || file.provider || "").toString(),
+      });
+    }
+  });
+  return map;
 });
 
 type CredentialRow = {
