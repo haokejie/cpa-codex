@@ -1,4 +1,4 @@
-import { computed, effectScope, ref, watch, type ComputedRef, type Ref } from "vue";
+import { computed, effectScope, ref, watch, type ComputedRef } from "vue";
 import type { AuthFileItem } from "../types";
 import { useAuthFilesStore } from "./authFiles";
 import { deleteAuthFile, listAuthFiles } from "../api/authFiles";
@@ -103,19 +103,19 @@ class CodexMonitorState {
   autoPausedRef = ref(false);
   autoPauseResolveRef = ref<(() => void) | null>(null);
 
-  codexFiles: ComputedRef<AuthFileItem[]>;
-  totalCount: ComputedRef<number>;
-  remaining: ComputedRef<number>;
-  progressPercent: ComputedRef<number>;
-  cleanableAccounts: ComputedRef<ScanResult[]>;
-  skippedAccounts: ComputedRef<ScanResult[]>;
-  skippedCount: ComputedRef<number>;
-  healthyCount: ComputedRef<number | null>;
-  selectedCount: ComputedRef<number>;
-  autoIsActive: ComputedRef<boolean>;
-  manualBusy: ComputedRef<boolean>;
-  autoStatusText: ComputedRef<string>;
-  autoHasLivePanel: ComputedRef<boolean>;
+  codexFiles!: ComputedRef<AuthFileItem[]>;
+  totalCount!: ComputedRef<number>;
+  remaining!: ComputedRef<number>;
+  progressPercent!: ComputedRef<number>;
+  cleanableAccounts!: ComputedRef<ScanResult[]>;
+  skippedAccounts!: ComputedRef<ScanResult[]>;
+  skippedCount!: ComputedRef<number>;
+  healthyCount!: ComputedRef<number | null>;
+  selectedCount!: ComputedRef<number>;
+  autoIsActive!: ComputedRef<boolean>;
+  manualBusy!: ComputedRef<boolean>;
+  autoStatusText!: ComputedRef<string>;
+  autoHasLivePanel!: ComputedRef<boolean>;
 
   private constructor() {
     this.scope.run(() => {
