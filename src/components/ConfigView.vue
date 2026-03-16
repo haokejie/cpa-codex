@@ -24,15 +24,15 @@ onMounted(() => {
 });
 
 type TabKey = 'quota' | 'auth' | 'api-keys' | 'usage' | 'api-details' | 'monitor' | 'settings';
-const activeTab = ref<TabKey>('auth');
+const activeTab = ref<TabKey>('monitor');
 
 const mainTabs: { key: TabKey; label: string }[] = [
+  { key: 'monitor', label: '监控' },
   { key: 'quota', label: '额度' },
   { key: 'auth', label: '认证' },
   { key: 'api-keys', label: '密钥' },
   { key: 'usage', label: '统计' },
   { key: 'api-details', label: 'API 明细' },
-  { key: 'monitor', label: '监控' },
 ];
 
 const accountLabel = computed(() => {
