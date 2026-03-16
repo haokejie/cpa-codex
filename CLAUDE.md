@@ -4,157 +4,166 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概述
 
-Tauri 2 桌面客户端，采用 **"前端主导 + Rust 配置层"** 架构：
-- Rust 后端仅负责应用配置（开机自启、托盘设置）和系统集成（托盘、窗口管理）
-- Vue 3 前端处理所有业务逻辑：账号管理、远程 API 调用、状态管理
-- 关闭窗口只隐藏，不退出进程，托盘图标提供"打开配置 / 退出"入口
+CPA Codex Desktop 是基于 Tauri 2 + Vue 3 的桌面客户端，用于管理 CLIProxyAPI 的 Codex 账号和额度。应用采用常驻后台模式，关闭窗口仅隐藏而不退出进程。
 
-### 核心功能
+- **前端**：Vue 3 + Pinia + TypeScript
+- **后端**：Rust (Tauri 2)
+- **包管理器**：pnpm
+- **窗口尺寸**：800×600（固定）
+- **Identifier**：`com.zoujunkun.tauri-app`
 
-#### 1. 账号管理（前端实现）
-
-- 登录验证：通过 Management API 的 `/config` 端点验证密码
-- 账号存储：使用 **localStorage** 存储账号列表（server + last_login_at）
-- 密码缓存：在前端**内存**中缓存（Map），刷新页面后需重新输入
-- Session 管理：当前登录的 server + password 保存在内存中
-
-#### 2. 远程 API 调用（前端实现）
-
-前端通过 `src/api/managementClient.ts` 直接调用 CLIProxyAPI 的 Management API：
-- 认证方式：`Authorization: Bearer <password>`
-- 基础路径：`/v0/management`
-- 支持开发代理：DEV 模式下可通过 Vite proxy 转发请求
-
-#### 3. 应用配置（Rust 实现）
-
-Rust 后端管理 4 个配置项，存储在 `config.json`：
-- `autostart_enabled` - 开机自启
-- `tray_enabled` - 托盘启用
-- `close_to_tray` - 关闭到托盘
-- `dock_visible_on_minimize` - 最小化时 Dock 可见性（macOS）
-
-### 关联项目
-
-本项目是 **[CLIProxyAPI](https://github.com/router-for-me/CLIProxyAPI)** 的 Tauri 桌面客户端。
-
-- **远程后端**：CLIProxyAPI 服务（最低版本 ≥ 6.8.0）
-  - 认证方式：`Authorization: Bearer <MANAGEMENT_KEY>`
-  - Management API 基础路径：`/v0/management`
-
-## 常用命令
-
-包管理器：**pnpm**
+## 开发命令
 
 ```bash
-# 启动完整开发环境（Tauri dev，自动启动前端 dev server）
+# 完整开发环境（Tauri + 前端 dev server）
 pnpm tauri dev
 
-# 仅启动前端 Vite dev server
+# 仅启动前端 Vite dev server（用于浏览器调试）
 pnpm dev
-
-# 构建发布包
-pnpm tauri build
 
 # 前端类型检查 + 构建
 pnpm build
 
-# Rust 类型检查
-cd src-tauri && cargo check
+# 测试
+pnpm test          # watch 模式
+pnpm test:run      # 单次运行
 
-# Rust lint
+# Rust 检查和 lint
+cd src-tauri && cargo check
 cd src-tauri && cargo clippy
 ```
 
-## 代码架构
+## 架构分层
 
-### 前端 (`src/`) — 分层架构
+### 前端分层（严格单向依赖）
 
-前端采用四层结构，**禁止跨层调用**（组件不直接 invoke）：
+```
+types/          类型定义层（与 Rust 结构体对应）
+  ↓
+api/            调用层（封装 invoke 和 HTTP 请求）
+  ↓
+stores/         状态与业务逻辑层（Pinia）
+  ↓
+components/     视图层（仅调用 store，不直接调用 api）
+```
 
-| 层 | 目录 | 职责 |
-|----|------|------|
-| 类型层 | `src/types/index.ts` | 与 Rust 结构体对应的 TS 类型，所有层共享 |
-| API 层 | `src/api/` | 封装 `invoke` 调用和远程 API 请求 |
-| Store 层 | `src/stores/` | Pinia store，管理状态与业务逻辑 |
-| 视图层 | `src/components/`、`App.vue` | 仅调用 store，不直接调用 api/ |
+**关键约定**：
+- 组件不得直接调用 `api/` 层，必须通过 `stores/`
+- `types/index.ts` 中的类型需与 Rust 结构体保持同步（见注释标注）
+- Store 之间可以相互调用，但需避免循环依赖
 
-使用 Vue 3 `<script setup>` SFC 风格，状态管理通过 Pinia。
+### 后端分层
 
-**API 层关键模块：**
-- `account.ts` - 账号管理（localStorage + 内存），登录验证
-- `session.ts` - Session 和密码缓存（纯内存）
-- `managementClient.ts` - 远程 API 请求封装（fetch + 错误处理）
-- `config.ts` - 应用配置（调用 Tauri commands）
-- `codex.ts` / `authFiles.ts` / `apiKeys.ts` - 各业务模块的远程 API 调用
+```
+lib.rs          应用入口、插件注册、事件处理
+  ↓
+commands.rs     Tauri IPC 命令（参数校验、结果转换）
+  ↓
+state.rs        应用状态聚合（依赖注入）
+  ↓
+config.rs       配置持久化（JSON 文件）
+tray.rs         系统托盘
+```
 
-**新增功能标准流程：**
-1. 在 `src/types/index.ts` 添加对应 TS 类型
-2. 在 `src/api/` 下对应文件添加 API 调用函数
-3. 在 `src/stores/` 下对应 store 添加 action
-4. 在组件中通过 `useXxxStore()` 使用
+## 前后端通信
 
-### Rust 后端 (`src-tauri/src/`) — 极简架构
+### 1. Tauri IPC（本地配置）
 
-后端只负责配置和系统集成，不含业务逻辑：
+前端通过 `@tauri-apps/api` 的 `invoke` 调用 Rust 命令：
 
-| 模块 | 职责 |
-|------|------|
-| `lib.rs` | Tauri Builder 配置，注册 commands，窗口事件处理 |
-| `commands.rs` | 5 个配置相关的 IPC commands |
-| `state.rs` | `AppState` 持有 `ConfigStore` |
-| `config.rs` | 配置文件读写（`config.json`） |
-| `tray.rs` | 系统托盘 |
-| `main.rs` | 入口 |
+```typescript
+// 前端：src/api/config.ts
+import { invoke } from "@tauri-apps/api/core";
+await invoke<AppConfig>("get_config");
 
-**新增配置项流程：**
-1. 在 `config.rs` 的 `AppConfig` 结构体添加字段
-2. 在 `ConfigStore` 添加 `set_xxx` 方法
-3. 在 `commands.rs` 添加对应 command
-4. 在 `lib.rs` 的 `invoke_handler!` 注册
+// 后端：src-tauri/src/commands.rs
+#[tauri::command]
+pub async fn get_config(state: State<'_, AppState>) -> Result<AppConfig, String>
+```
 
-### IPC Commands（前端可 `invoke` 的命令）
+**用途**：应用配置（开机自启、托盘、Dock 可见性）
 
-**应用配置（已实现）：**
-- `get_config()` → 返回 `AppConfig { autostart_enabled, tray_enabled, close_to_tray, dock_visible_on_minimize }`
-- `set_autostart_enabled(enabled: bool)` → 开关开机自启
-- `set_tray_enabled(enabled: bool)` → 开关托盘
-- `set_close_to_tray(enabled: bool)` → 开关关闭到托盘
-- `set_dock_visible_on_minimize(enabled: bool)` → 开关最小化时 Dock 可见性（macOS）
+### 2. HTTP 请求（远程 Management API）
 
-**注意：** 账号管理、远程 API 调用等业务功能全部在前端实现，不通过 Tauri commands。
+前端直接调用 CLIProxyAPI 的 Management API（`/v0/management/*`）：
 
-### 权限管理
+```typescript
+// src/api/managementClient.ts
+const url = buildManagementUrl(server, "/config");
+await requestJson<T>(url, { auth: password });
+```
 
-Tauri 2 使用 capabilities 系统，权限配置在 `src-tauri/capabilities/default.json`。新增 Tauri 插件或 API 时，需在此文件添加对应 permission。
+**认证方式**：`Authorization: Bearer <MANAGEMENT_KEY>`（即用户密码）
 
-### 数据存储
+**开发代理**：
+- 设置环境变量 `VITE_MANAGEMENT_PROXY_TARGET=http://localhost:8787`
+- Vite 会将 `/v0/management` 代理到目标服务器
+- 仅在浏览器开发时生效（`!isTauri() && import.meta.env.DEV`）
 
-- **Rust 配置文件** (`app_data_dir/config.json`)：4 个应用配置项
-- **前端 localStorage**：
-  - `cpa-codex:accounts` - 账号列表 `[{ account_key, server, last_login_at }]`
-  - `cpa-codex:last-account` - 上次登录的 account_key
-- **前端内存**：
-  - Session（当前登录的 server + password）
-  - 密码缓存（Map<account_key, password>）
-  - 记住密码偏好（Map<account_key, boolean>）
+## 数据存储
 
-`app_data_dir` 实际路径（identifier: `com.zoujunkun.tauri-app`）：
-- macOS：`~/Library/Application Support/com.zoujunkun.tauri-app/`
-- Windows：`C:\Users\<user>\AppData\Roaming\com.zoujunkun.tauri-app\`
-- Linux：`~/.local/share/com.zoujunkun.tauri-app/`
+### 前端（localStorage）
 
-### Auth 状态机（前端 `useAuthStore`）
+- **账号列表**：`cpa-codex:accounts`（服务器地址、最后登录时间）
+- **最后登录账号**：`cpa-codex:last-account`
+- **密码缓存**：内存中（`Map<accountKey, password>`），页面刷新后清空
+- **记住密码偏好**：`cpa-codex:remember:<accountKey>`
 
-前端认证流程由 `mode` 状态驱动，4 种模式：
-- `"prompt"` → 检测到上次登录账号，提示快速登录
-- `"list"` → 显示已有账号列表供选择
-- `"form"` → 无账号，显示新增账号表单
-- `"config"` → 已登录，显示配置页
+### 后端（Rust）
 
-### 关键约定
+- **应用配置**：`app_data_dir/config.json`（开机自启、托盘、Dock 设置）
+- **数据目录**：
+  - macOS: `~/Library/Application Support/com.zoujunkun.tauri-app/`
+  - Windows: `C:\Users\<user>\AppData\Roaming\com.zoujunkun.tauri-app\`
+  - Linux: `~/.local/share/com.zoujunkun.tauri-app/`
 
-- `account_key` 即服务器 URL（经过 `normalizeApiBase` 标准化）
-- 新增 Tauri command 需在 `commands.rs` 定义，并在 `lib.rs` 的 `invoke_handler!` 中注册
-- 关闭窗口行为在 `lib.rs` 的 `on_window_event` 中拦截，改为 `hide()`
-- 前端直接调用远程 API，不通过 Rust 代理
-- 密码仅在内存中缓存，刷新页面后需重新输入（安全考虑）
+**注意**：Codex 账号配置不在本地持久化，由 CLIProxyAPI 服务端统一管理。
+
+## 类型同步约定
+
+以下类型定义需与 Rust 结构体保持一致（字段名、类型、可选性）：
+
+- `AppConfig` ↔ `src-tauri/src/config.rs::AppConfig`
+- `LoginPayload` ↔ `src-tauri/src/commands.rs::LoginPayload`（如果存在）
+- `CommandResult` ↔ `src-tauri/src/commands.rs::CommandResult`
+
+修改 Rust 结构体时，必须同步更新 `src/types/index.ts`。
+
+## 窗口行为
+
+- **关闭窗口**：默认隐藏而非退出（`close_to_tray: true`）
+- **macOS Dock**：
+  - 窗口可见时显示 Dock 图标
+  - 最小化时根据 `dock_visible_on_minimize` 配置决定是否隐藏
+  - 使用 `ActivationPolicy::Accessory` 隐藏 Dock 图标
+- **重新打开**：macOS 点击 Dock 图标或托盘菜单可恢复窗口
+
+## 开发注意事项
+
+1. **类型安全**：前端类型定义与 Rust 结构体必须同步，修改时需同时更新
+2. **分层约束**：组件不得直接调用 `api/` 层，必须通过 `stores/`
+3. **密码处理**：密码仅在内存中缓存，不持久化到磁盘（安全考虑）
+4. **API 版本**：要求 CLIProxyAPI >= 6.8.0（Management API 支持）
+5. **开发代理**：浏览器开发时需设置 `VITE_MANAGEMENT_PROXY_TARGET` 环境变量
+6. **测试隔离**：使用 vitest + jsdom，测试时 Tauri API 不可用（需 mock）
+
+## 常见任务
+
+### 添加新的 Tauri 命令
+
+1. 在 `src-tauri/src/commands.rs` 添加命令函数（标注 `#[tauri::command]`）
+2. 在 `src-tauri/src/lib.rs` 的 `invoke_handler!` 中注册
+3. 在 `src/api/` 创建对应的调用函数（封装 `invoke`）
+4. 在 `src/stores/` 中调用 api 函数
+5. 如有新类型，在 `src/types/index.ts` 和 Rust 中同步定义
+
+### 添加新的 Management API 调用
+
+1. 在 `src/api/` 创建调用函数（使用 `buildManagementUrl` + `requestJson`）
+2. 在 `src/types/index.ts` 定义响应类型
+3. 在 `src/stores/` 中调用并管理状态
+4. 组件通过 store 访问数据
+
+### 修改窗口行为
+
+窗口事件处理在 `src-tauri/src/lib.rs` 的 `.on_window_event()` 中，macOS 特定行为需使用 `#[cfg(target_os = "macos")]`。
