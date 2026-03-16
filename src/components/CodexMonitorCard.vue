@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref, computed } from "vue";
 import BaseCard from "./BaseCard.vue";
 import ConfirmDialog from "./ConfirmDialog.vue";
 import { useCodexMonitorState } from "../stores/codexMonitorState";
@@ -46,6 +47,7 @@ const {
   autoConcurrencyInput,
   autoBatchDelayInput,
   autoIntervalInput,
+  autoConfigRef,
   confirmOpen,
   confirmMessage,
   autoStopConfirmOpen,
@@ -68,6 +70,45 @@ const confirmAutoStop = () => monitor.confirmAutoStop();
 const cancelAutoStop = () => monitor.cancelAutoStop();
 const normalizeAutoInputs = () => monitor.normalizeAutoInputs();
 const formatCountdown = (sec: number) => monitor.formatCountdown(sec);
+
+const autoConfigOpen = ref(false);
+const autoConfigConcurrencyDraft = ref("");
+const autoConfigBatchDelayDraft = ref("");
+const autoConfigIntervalDraft = ref("");
+
+const autoHistoryOpen = ref(false);
+
+const autoTotalDeleted = computed(() =>
+  autoHistory.value.reduce((sum: number, h: { deleted: number }) => sum + h.deleted, 0)
+);
+
+const autoScanPercent = computed(() =>
+  autoScanTotal.value > 0 ? Math.round((autoScanProcessed.value / autoScanTotal.value) * 100) : 0
+);
+
+const autoDeletePercent = computed(() =>
+  autoDeleteTotal.value > 0 ? Math.round((autoDeleteProcessed.value / autoDeleteTotal.value) * 100) : 0
+);
+
+const openAutoConfig = () => {
+  autoConfigConcurrencyDraft.value = autoConcurrencyInput.value;
+  autoConfigBatchDelayDraft.value = autoBatchDelayInput.value;
+  autoConfigIntervalDraft.value = autoIntervalInput.value;
+  autoConfigOpen.value = true;
+};
+
+const closeAutoConfig = () => {
+  autoConfigOpen.value = false;
+};
+
+const saveAutoConfig = () => {
+  if (autoIsActive.value) return;
+  autoConcurrencyInput.value = autoConfigConcurrencyDraft.value;
+  autoBatchDelayInput.value = autoConfigBatchDelayDraft.value;
+  autoIntervalInput.value = autoConfigIntervalDraft.value;
+  normalizeAutoInputs();
+  autoConfigOpen.value = false;
+};
 </script>
 
 <template>
@@ -223,20 +264,21 @@ const formatCountdown = (sec: number) => monitor.formatCountdown(sec);
       <div v-if="activeTab === 'auto'" class="auto-panel">
         <div class="auto-hero">
           <div class="auto-hero-main">
+            <span class="auto-status" :class="{
+              'auto-status-on': autoEnabled && autoRunStatus !== 'paused' && autoRunStatus !== 'pausing',
+              'auto-status-paused': autoEnabled && (autoRunStatus === 'paused' || autoRunStatus === 'pausing'),
+              'auto-status-off': !autoEnabled
+            }">
+              <span class="auto-status-dot"></span>
+              <span v-if="!autoEnabled">未启用</span>
+              <span v-else-if="autoRunStatus === 'paused' || autoRunStatus === 'pausing'">已暂停</span>
+              <span v-else>运行中</span>
+            </span>
             <div class="auto-hero-title">
               自动扫描
-              <span class="auto-status" :class="{
-                'auto-status-on': autoEnabled && autoRunStatus !== 'paused' && autoRunStatus !== 'pausing',
-                'auto-status-paused': autoEnabled && (autoRunStatus === 'paused' || autoRunStatus === 'pausing'),
-                'auto-status-off': !autoEnabled
-              }">
-                <span class="auto-status-dot"></span>
-                <span v-if="!autoEnabled">未启用</span>
-                <span v-else-if="autoRunStatus === 'paused' || autoRunStatus === 'pausing'">已暂停</span>
-                <span v-else>运行中</span>
-              </span>
+              <span v-if="autoEnabled && autoIsActive" class="auto-hero-subtitle">· {{ autoStatusText }}</span>
             </div>
-            <div class="auto-hero-desc">{{ autoStatusText }}</div>
+            <div class="auto-hero-meta">已累计清理 {{ autoTotalDeleted }} 个失效账号</div>
           </div>
           <div class="auto-hero-actions">
 
@@ -254,96 +296,145 @@ const formatCountdown = (sec: number) => monitor.formatCountdown(sec);
           </div>
         </div>
 
-        <div class="auto-config-grid">
-          <div class="auto-config-item">
-            <div class="auto-config-label">并发数量</div>
-            <input v-model="autoConcurrencyInput" type="number" min="1" max="50" :disabled="autoIsActive"
-              @blur="normalizeAutoInputs" />
-            <div class="auto-config-hint">同时检测的账号数量</div>
+        <div class="auto-config-bar">
+          <div class="auto-config-chips">
+            <span class="config-chip">并发 {{ autoConfigRef.concurrency }}</span>
+            <span class="config-sep"></span>
+            <span class="config-chip">批次 {{ autoConfigRef.batchDelayMs }}ms</span>
+            <span class="config-sep"></span>
+            <span class="config-chip">间隔 {{ autoConfigRef.intervalMin }} 分钟</span>
           </div>
-          <div class="auto-config-item">
-            <div class="auto-config-label">批次间隔 (ms)</div>
-            <input v-model="autoBatchDelayInput" type="number" min="0" max="60000" :disabled="autoIsActive"
-              @blur="normalizeAutoInputs" />
-            <div class="auto-config-hint">每批检测之间的等待时间</div>
-          </div>
-          <div class="auto-config-item">
-            <div class="auto-config-label">检查间隔（分钟）</div>
-            <input v-model="autoIntervalInput" type="number" min="1" max="1440" :disabled="autoIsActive"
-              @blur="normalizeAutoInputs" />
-            <div class="auto-config-hint">两次自动扫描的间隔</div>
+          <button class="btn-ghost btn-sm" @click="openAutoConfig">
+            {{ autoIsActive ? "查看配置" : "修改配置" }}
+          </button>
+        </div>
+
+        <div v-if="autoConfigOpen" class="mask">
+          <div class="dialog auto-config-dialog">
+            <div class="dialog-header">
+              <h3 class="dialog-title">自动扫描配置</h3>
+              <p class="dialog-subtitle">修改后将在下一轮扫描生效</p>
+            </div>
+            <div class="dialog-body">
+              <div class="auto-config-form">
+                <div class="auto-config-field">
+                  <div class="auto-config-label">并发数量</div>
+                  <input v-model="autoConfigConcurrencyDraft" type="number" min="1" max="50" :disabled="autoIsActive" />
+                  <div class="auto-config-hint">同时检测的账号数量</div>
+                </div>
+                <div class="auto-config-field">
+                  <div class="auto-config-label">批次间隔 (ms)</div>
+                  <input v-model="autoConfigBatchDelayDraft" type="number" min="0" max="60000" :disabled="autoIsActive" />
+                  <div class="auto-config-hint">每批检测之间的等待时间</div>
+                </div>
+                <div class="auto-config-field">
+                  <div class="auto-config-label">检查间隔（分钟）</div>
+                  <input v-model="autoConfigIntervalDraft" type="number" min="1" max="1440" :disabled="autoIsActive" />
+                  <div class="auto-config-hint">两次自动扫描的间隔</div>
+                </div>
+              </div>
+              <div v-if="autoIsActive" class="auto-config-note">自动扫描运行中，暂停后可修改配置。</div>
+            </div>
+            <div class="dialog-footer">
+              <button class="btn-ghost" @click="closeAutoConfig">取消</button>
+              <button class="btn-ghost btn-primary" :disabled="autoIsActive" @click="saveAutoConfig">保存配置</button>
+            </div>
           </div>
         </div>
 
         <div v-if="autoHasLivePanel" class="auto-live">
-          <div v-if="autoRunStatus === 'scanning' || autoRunStatus === 'pausing' || autoPausedFrom === 'scanning'"
-            class="progress-area">
+          <template v-if="autoRunStatus === 'scanning' || autoRunStatus === 'pausing' || autoPausedFrom === 'scanning'">
+            <div class="live-label-row">
+              <span class="live-label">扫描进度</span>
+              <span class="live-count">{{ autoScanProcessed }} / {{ autoScanTotal }}</span>
+            </div>
             <div class="progress-track">
-              <div class="progress-fill"
-                :style="{ width: Math.round((autoScanProcessed / Math.max(1, autoScanTotal)) * 100) + '%' }"></div>
+              <div class="progress-fill progress-fill-indigo" :style="{ width: autoScanPercent + '%' }"></div>
             </div>
-            <div class="progress-text">
-              正在检测 {{ autoScanProcessed }}/{{ autoScanTotal }}
+            <div class="live-meta-row">
+              <span class="live-percent">{{ autoScanPercent }}%</span>
+              <span class="live-remaining">剩余 {{ Math.max(0, autoScanTotal - autoScanProcessed) }} 个</span>
             </div>
-          </div>
+          </template>
 
-          <div v-else-if="autoRunStatus === 'deleting' || autoPausedFrom === 'deleting'" class="progress-area">
+          <template v-else-if="autoRunStatus === 'deleting' || autoPausedFrom === 'deleting'">
+            <div class="live-label-row">
+              <span class="live-label">删除进度</span>
+              <span class="live-count live-count-orange">{{ autoDeleteProcessed }} / {{ autoDeleteTotal }}</span>
+            </div>
             <div class="progress-track">
-              <div class="progress-fill"
-                :style="{ width: Math.round((autoDeleteProcessed / Math.max(1, autoDeleteTotal)) * 100) + '%' }"></div>
+              <div class="progress-fill progress-fill-orange" :style="{ width: autoDeletePercent + '%' }"></div>
             </div>
-            <div class="progress-text">
-              正在删除 {{ autoDeleteProcessed }}/{{ autoDeleteTotal }}
+            <div class="live-meta-row">
+              <span class="live-percent">{{ autoDeletePercent }}%</span>
+              <span class="live-remaining">剩余 {{ Math.max(0, autoDeleteTotal - autoDeleteProcessed) }} 个</span>
             </div>
-          </div>
+          </template>
 
-          <div v-else-if="autoRunStatus === 'waiting' || autoPausedFrom === 'waiting'" class="countdown">
-            <span class="countdown-value">{{ formatCountdown(autoCountdown) }}</span>
-            <span class="countdown-label">下次检查倒计时</span>
-          </div>
+          <template v-else-if="autoRunStatus === 'waiting' || autoPausedFrom === 'waiting'">
+            <div class="countdown">
+              <span class="countdown-value">{{ formatCountdown(autoCountdown) }}</span>
+              <span class="countdown-label">下次检查倒计时</span>
+            </div>
+          </template>
         </div>
 
-        <div v-if="autoLastResult" class="auto-result">
-          <div class="stat-card">
-            <div class="stat-value">{{ autoLastResult.scanned }}</div>
-            <div class="stat-label">扫描数</div>
+        <template v-if="autoLastResult">
+          <div class="section-label-row">
+            <span class="section-label">上次结果</span>
+            <span v-if="autoLastDurationMs" class="section-meta">耗时 {{ (autoLastDurationMs / 1000).toFixed(1) }}s</span>
           </div>
-          <div class="stat-card">
-            <div class="stat-value danger">{{ autoLastResult.deleted }}</div>
-            <div class="stat-label">清理数</div>
+          <div class="auto-result">
+            <div class="stat-card">
+              <div class="stat-icon stat-icon-default">⟳</div>
+              <div class="stat-value">{{ autoLastResult.scanned }}</div>
+              <div class="stat-label">扫描账号数</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon stat-icon-danger">✕</div>
+              <div class="stat-value danger">{{ autoLastResult.deleted }}</div>
+              <div class="stat-label">清理账号数</div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon stat-icon-success">✓</div>
+              <div class="stat-value success">{{ autoLastResult.scanned - autoLastResult.deleted }}</div>
+              <div class="stat-label">正常账号数</div>
+            </div>
           </div>
-          <div class="stat-card">
-            <div class="stat-value success">{{ autoLastResult.scanned - autoLastResult.deleted }}</div>
-            <div class="stat-label">正常</div>
-          </div>
-          <div v-if="autoLastDurationMs" class="auto-duration">
-            耗时 {{ (autoLastDurationMs / 1000).toFixed(1) }}s
-          </div>
-        </div>
+        </template>
 
-        <details v-if="autoHistory.length" class="auto-history">
-          <summary class="history-title">
-            执行历史 <span class="history-count">{{ autoHistory.length }}</span>
-          </summary>
-          <table class="history-table">
-            <thead>
-              <tr>
-                <th>执行时间</th>
-                <th>扫描数</th>
-                <th>清理数</th>
-                <th>耗时</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr v-for="entry in autoHistory" :key="entry.timestamp">
-                <td>{{ new Date(entry.timestamp).toLocaleTimeString() }}</td>
-                <td>{{ entry.scanned }}</td>
-                <td>{{ entry.deleted }}</td>
-                <td>{{ (entry.durationMs / 1000).toFixed(1) }}s</td>
-              </tr>
-            </tbody>
-          </table>
-        </details>
+        <div v-if="autoHistory.length" class="auto-history">
+          <div class="history-header" @click="autoHistoryOpen = !autoHistoryOpen">
+            <div class="history-header-left">
+              <span class="history-title">执行历史</span>
+              <span class="history-count">{{ autoHistory.length }}</span>
+            </div>
+            <span class="history-toggle">{{ autoHistoryOpen ? '收起 ▲' : '展开 ▼' }}</span>
+          </div>
+          <template v-if="autoHistoryOpen">
+            <table class="history-table">
+              <thead>
+                <tr>
+                  <th>执行时间</th>
+                  <th>扫描数</th>
+                  <th>清理数</th>
+                  <th>正常</th>
+                  <th>耗时</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="(entry, idx) in autoHistory" :key="entry.timestamp"
+                  :class="{ 'history-row-latest': idx === 0 }">
+                  <td class="history-time">{{ new Date(entry.timestamp).toLocaleTimeString() }}</td>
+                  <td>{{ entry.scanned }}</td>
+                  <td :class="entry.deleted > 0 ? 'history-deleted' : ''">{{ entry.deleted }}</td>
+                  <td :class="(entry.scanned - entry.deleted) > 0 ? 'history-healthy' : ''">{{ entry.scanned - entry.deleted }}</td>
+                  <td class="history-muted">{{ (entry.durationMs / 1000).toFixed(1) }}s</td>
+                </tr>
+              </tbody>
+            </table>
+          </template>
+        </div>
       </div>
     </div>
   </BaseCard>
@@ -394,7 +485,8 @@ const formatCountdown = (sec: number) => monitor.formatCountdown(sec);
   border: 1px solid var(--zinc-200);
   border-radius: 10px;
   padding: 12px;
-  text-align: center;
+  text-align: left;
+  position: relative;
 }
 
 .stat-value {
@@ -715,13 +807,31 @@ const formatCountdown = (sec: number) => monitor.formatCountdown(sec);
   background: #fff;
 }
 
+.auto-hero-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
 .auto-hero-title {
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--zinc-900);
-  display: inline-flex;
+  display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 6px;
+}
+
+.auto-hero-subtitle {
+  font-size: 12px;
+  font-weight: 400;
+  color: var(--zinc-500);
+}
+
+.auto-hero-meta {
+  font-size: 12px;
+  color: var(--zinc-400);
 }
 
 .auto-hero-desc {
@@ -735,12 +845,13 @@ const formatCountdown = (sec: number) => monitor.formatCountdown(sec);
   align-items: center;
   gap: 6px;
   padding: 2px 8px;
-  border-radius: 999px;
+  border-radius: 6px;
   font-size: 11px;
   font-weight: 500;
   border: 1px solid var(--zinc-200);
   color: var(--zinc-600);
   background: var(--zinc-50);
+  width: fit-content;
 }
 
 .auto-status-dot {
@@ -782,28 +893,99 @@ const formatCountdown = (sec: number) => monitor.formatCountdown(sec);
   flex-wrap: wrap;
 }
 
-.auto-config-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+.auto-config-bar {
+  border: 1px solid var(--zinc-200);
+  border-radius: 10px;
+  background: #FAFAFA;
+  padding: 8px 12px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.auto-config-chips {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.config-chip {
+  font-size: 11px;
+  color: var(--zinc-600);
+  background: var(--zinc-100);
+  border-radius: 6px;
+  padding: 2px 8px;
+}
+
+.config-sep {
+  width: 1px;
+  height: 14px;
+  background: var(--zinc-200);
+}
+
+.mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(9, 9, 11, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 50;
+  backdrop-filter: blur(2px);
+}
+
+.dialog {
+  width: 420px;
+  background: #FFFFFF;
+  border-radius: 12px;
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.14);
+  overflow: hidden;
+}
+
+.dialog-header {
+  padding: 20px 20px 0;
+}
+
+.dialog-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: #18181B;
+}
+
+.dialog-subtitle {
+  font-size: 12px;
+  color: #71717A;
+  margin-top: 6px;
+}
+
+.dialog-body {
+  padding: 12px 20px 16px;
+}
+
+.dialog-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 20px 20px;
+}
+
+.auto-config-form {
+  display: flex;
+  flex-direction: column;
   gap: 12px;
 }
 
-.auto-config-item {
-  padding: 12px;
-  border: 1px solid var(--zinc-200);
-  border-radius: 10px;
-  background: #fff;
+.auto-config-field {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
-.auto-config-label {
-  font-size: 12px;
-  color: var(--zinc-600);
-}
-
-.auto-config-item input {
+.auto-config-field input {
   padding: 6px 8px;
   border: 1px solid var(--zinc-200);
   border-radius: 6px;
@@ -811,19 +993,76 @@ const formatCountdown = (sec: number) => monitor.formatCountdown(sec);
   color: var(--zinc-700);
 }
 
-.auto-config-hint {
-  font-size: 11px;
-  color: var(--zinc-400);
+.auto-config-note {
+  margin-top: 12px;
+  font-size: 12px;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  padding: 8px 10px;
+  border-radius: 8px;
 }
 
 .auto-live {
-  padding: 12px;
+  padding: 14px 16px;
   border: 1px dashed var(--zinc-200);
   border-radius: 10px;
   background: var(--zinc-50);
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.live-label-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.live-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--zinc-600);
+}
+
+.live-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6366F1;
+}
+
+.live-count-orange {
+  color: #F97316;
+}
+
+.live-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.live-percent {
+  font-size: 11px;
+  color: var(--zinc-500);
+}
+
+.live-remaining {
+  font-size: 11px;
+  color: var(--zinc-400);
+}
+
+.progress-fill-indigo {
+  height: 100%;
+  background: linear-gradient(90deg, #818CF8, #6366F1);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.progress-fill-orange {
+  height: 100%;
+  background: linear-gradient(90deg, #FB923C, #F97316);
+  border-radius: 999px;
+  transition: width 0.2s ease;
 }
 
 .countdown {
@@ -846,32 +1085,92 @@ const formatCountdown = (sec: number) => monitor.formatCountdown(sec);
   gap: 12px;
 }
 
-.auto-duration {
-  grid-column: 1 / -1;
+.section-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.section-label {
   font-size: 12px;
+  font-weight: 500;
   color: var(--zinc-500);
+}
+
+.section-meta {
+  font-size: 11px;
+  color: var(--zinc-400);
+}
+
+.stat-icon {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 24px;
+  height: 24px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.stat-icon-default {
+  background: var(--zinc-100);
+  color: var(--zinc-500);
+}
+
+.stat-icon-danger {
+  background: #FEF2F2;
+  color: #DC2626;
+}
+
+.stat-icon-success {
+  background: #F0FDF4;
+  color: #16A34A;
 }
 
 .auto-history {
   border: 1px solid var(--zinc-200);
   border-radius: 10px;
-  padding: 12px;
   background: #fff;
+  overflow: hidden;
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 14px;
+  cursor: pointer;
+  user-select: none;
+}
+
+.history-header:hover {
+  background: var(--zinc-50);
+}
+
+.history-header-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .history-title {
   font-size: 12px;
+  font-weight: 600;
   color: var(--zinc-600);
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  cursor: pointer;
+}
+
+.history-toggle {
+  font-size: 11px;
+  color: var(--zinc-400);
 }
 
 .history-count {
   background: var(--zinc-100);
-  border-radius: 999px;
-  padding: 2px 8px;
+  border-radius: 5px;
+  padding: 1px 7px;
   font-size: 11px;
   color: var(--zinc-600);
 }
@@ -881,18 +1180,48 @@ const formatCountdown = (sec: number) => monitor.formatCountdown(sec);
   border-collapse: collapse;
   font-size: 12px;
   color: var(--zinc-600);
-  margin-top: 8px;
 }
 
 .history-table th,
 .history-table td {
   text-align: left;
-  padding: 6px 0;
+  padding: 7px 14px;
   border-bottom: 1px solid var(--zinc-100);
+}
+
+.history-table th {
+  font-size: 11px;
+  color: var(--zinc-400);
+  font-weight: 500;
+  background: var(--zinc-50);
+  border-top: 1px solid var(--zinc-100);
 }
 
 .history-table tr:last-child td {
   border-bottom: none;
+}
+
+.history-row-latest td {
+  background: #FAFAFA;
+}
+
+.history-time {
+  font-family: "SF Mono", "JetBrains Mono", monospace;
+  color: var(--zinc-500);
+}
+
+.history-deleted {
+  color: #DC2626;
+  font-weight: 500;
+}
+
+.history-healthy {
+  color: #16A34A;
+  font-weight: 500;
+}
+
+.history-muted {
+  color: var(--zinc-400);
 }
 
 @media (max-width: 900px) {
@@ -903,10 +1232,6 @@ const formatCountdown = (sec: number) => monitor.formatCountdown(sec);
 
   .auto-hero-actions {
     width: 100%;
-  }
-
-  .auto-config-grid {
-    grid-template-columns: 1fr;
   }
 }
 </style>
