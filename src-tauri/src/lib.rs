@@ -40,24 +40,29 @@ pub fn run() {
         })
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
-                let close_to_tray = window
-                    .app_handle()
-                    .try_state::<AppState>()
+                let state = window.app_handle().try_state::<AppState>();
+                let close_to_tray = state
+                    .as_ref()
                     .map(|s| s.config.get().close_to_tray)
                     .unwrap_or(true);
-                let dock_visible_on_minimize = window
-                    .app_handle()
-                    .try_state::<AppState>()
-                    .map(|s| s.config.get().dock_visible_on_minimize)
-                    .unwrap_or(true);
-                if close_to_tray {
+                let tray_enabled = state
+                    .as_ref()
+                    .map(|s| s.config.get().tray_enabled)
+                    .unwrap_or(false);
+                if close_to_tray && tray_enabled {
                     api.prevent_close();
                     let _ = window.hide();
                     #[cfg(target_os = "macos")]
-                    if !dock_visible_on_minimize {
-                        let _ = window
-                            .app_handle()
-                            .set_activation_policy(ActivationPolicy::Accessory);
+                    {
+                        let dock_visible_on_minimize = state
+                            .as_ref()
+                            .map(|s| s.config.get().dock_visible_on_minimize)
+                            .unwrap_or(true);
+                        if !dock_visible_on_minimize {
+                            let _ = window
+                                .app_handle()
+                                .set_activation_policy(ActivationPolicy::Accessory);
+                        }
                     }
                 }
             }
