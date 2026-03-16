@@ -1,15 +1,15 @@
 import { computed, effectScope, ref, watch, type ComputedRef } from "vue";
 import type { AuthFileItem } from "../types";
 import { useAuthFilesStore } from "./authFiles";
-import { deleteAuthFile, listAuthFiles } from "../api/authFiles";
+import { deleteAuthFile, listAuthFiles, setAuthFileStatus } from "../api/authFiles";
 import { getCodexQuotaByAuthIndex } from "../api/codex";
 import { normalizeAuthIndex } from "../utils/usage";
-import { resolveCodexChatgptAccountId } from "../utils/codexQuota";
+import { resolveCodexChatgptAccountId, buildCodexQuotaWindows, parseCodexUsagePayload } from "../utils/codexQuota";
 
 type CleanableReason = "expired" | "error";
 type ScanStatus = "idle" | "scanning" | "stopping" | "done";
-type AutoRunStatus = "idle" | "scanning" | "deleting" | "waiting" | "pausing" | "paused";
-type AutoPausedFrom = "scanning" | "deleting" | "waiting";
+type AutoRunStatus = "idle" | "scanning" | "deleting" | "toggling" | "waiting" | "pausing" | "paused";
+type AutoPausedFrom = "scanning" | "deleting" | "toggling" | "waiting";
 
 type ScanResult = {
   file: AuthFileItem;
@@ -18,7 +18,7 @@ type ScanResult = {
 };
 
 type ScanOutcome =
-  | { kind: "ok" }
+  | { kind: "ok"; quotaPayload?: Record<string, unknown> }
   | { kind: "expired"; statusCode?: number | null }
   | { kind: "skipped"; statusCode?: number | null };
 
@@ -27,6 +27,7 @@ const BATCH_DELAY_MS = 2000;
 const DELETE_BATCH_SIZE = 10;
 const DELETE_BATCH_DELAY_MS = 300;
 const DEFAULT_AUTO_INTERVAL_MIN = 60;
+const ENABLE_REMAINING_THRESHOLD = 95;
 const AUTO_HISTORY_MAX = 10;
 
 class CodexMonitorState {
@@ -79,15 +80,19 @@ class CodexMonitorState {
   autoEnabled = ref(false);
   autoRunStatus = ref<AutoRunStatus>("idle");
   autoCountdown = ref(0);
-  autoLastResult = ref<{ scanned: number; deleted: number } | null>(null);
+  autoLastResult = ref<{ scanned: number; deleted: number; disabled: number; enabled: number } | null>(null);
   autoScanProcessed = ref(0);
   autoScanTotal = ref(0);
   autoDeleteProcessed = ref(0);
   autoDeleteTotal = ref(0);
   autoCleanableItems = ref<{ name: string; reason: CleanableReason }[]>([]);
-  autoHistory = ref<{ timestamp: number; scanned: number; deleted: number; durationMs: number }[]>([]);
+  autoHistory = ref<{ timestamp: number; scanned: number; deleted: number; disabled: number; enabled: number; durationMs: number }[]>([]);
   autoLastDurationMs = ref(0);
   autoPausedFrom = ref<AutoPausedFrom | null>(null);
+
+  autoToggleThresholdInput = ref("5");
+  autoToggleProcessed = ref(0);
+  autoToggleTotal = ref(0);
 
   autoConcurrencyInput = ref(String(DEFAULT_BATCH_SIZE));
   autoBatchDelayInput = ref(String(BATCH_DELAY_MS));
@@ -97,6 +102,7 @@ class CodexMonitorState {
     concurrency: DEFAULT_BATCH_SIZE,
     batchDelayMs: BATCH_DELAY_MS,
     intervalMin: DEFAULT_AUTO_INTERVAL_MIN,
+    toggleThreshold: 5,
   });
 
   autoRunningRef = ref(false);
@@ -151,6 +157,7 @@ class CodexMonitorState {
         if (this.autoRunStatus.value === "scanning" && this.fetchingFiles.value) return "正在获取账号列表...";
         if (this.autoRunStatus.value === "scanning") return "自动扫描中...";
         if (this.autoRunStatus.value === "deleting") return "自动删除中...";
+        if (this.autoRunStatus.value === "toggling") return "自动开关中...";
         if (this.autoRunStatus.value === "waiting") {
           return `下次检查: ${this.formatCountdown(this.autoCountdown.value)}`;
         }
@@ -159,17 +166,19 @@ class CodexMonitorState {
       this.autoHasLivePanel = computed(() =>
         this.autoRunStatus.value === "scanning"
         || this.autoRunStatus.value === "deleting"
+        || this.autoRunStatus.value === "toggling"
         || this.autoRunStatus.value === "waiting"
         || this.autoRunStatus.value === "pausing"
         || this.autoRunStatus.value === "paused"
         || Boolean(this.autoPausedFrom.value)
       );
 
-      watch([this.autoConcurrencyInput, this.autoBatchDelayInput, this.autoIntervalInput], () => {
+      watch([this.autoConcurrencyInput, this.autoBatchDelayInput, this.autoIntervalInput, this.autoToggleThresholdInput], () => {
         const concurrency = this.parsePositiveInt(this.autoConcurrencyInput.value, DEFAULT_BATCH_SIZE, 1, 50);
         const batchDelayMs = this.parsePositiveInt(this.autoBatchDelayInput.value, BATCH_DELAY_MS, 0, 60000);
         const intervalMin = this.parsePositiveInt(this.autoIntervalInput.value, DEFAULT_AUTO_INTERVAL_MIN, 1, 1440);
-        this.autoConfigRef.value = { concurrency, batchDelayMs, intervalMin };
+        const toggleThreshold = this.parsePositiveInt(this.autoToggleThresholdInput.value, 5, 0, 100);
+        this.autoConfigRef.value = { concurrency, batchDelayMs, intervalMin, toggleThreshold };
       });
 
       watch(this.autoEnabled, (enabled) => {
@@ -223,8 +232,8 @@ class CodexMonitorState {
       return { kind: "skipped", statusCode: null };
     }
     try {
-      await getCodexQuotaByAuthIndex(authIndex, accountId);
-      return { kind: "ok" };
+      const quotaPayload = await getCodexQuotaByAuthIndex(authIndex, accountId);
+      return { kind: "ok", quotaPayload };
     } catch (err) {
       const status = this.getStatusFromError(err);
       if (status === 401) {
@@ -232,6 +241,14 @@ class CodexMonitorState {
       }
       return { kind: "skipped", statusCode: status };
     }
+  }
+
+  private extractWeeklyUsedPercent(quotaPayload: Record<string, unknown>): number | null {
+    const parsed = parseCodexUsagePayload(quotaPayload);
+    if (!parsed) return null;
+    const windows = buildCodexQuotaWindows(parsed);
+    const weekly = windows.find((w) => w.id === "weekly");
+    return weekly?.usedPercent ?? null;
   }
 
   async refreshMonitorPool() {
@@ -423,10 +440,12 @@ class CodexMonitorState {
     const concurrency = this.parsePositiveInt(this.autoConcurrencyInput.value, DEFAULT_BATCH_SIZE, 1, 50);
     const batchDelayMs = this.parsePositiveInt(this.autoBatchDelayInput.value, BATCH_DELAY_MS, 0, 60000);
     const intervalMin = this.parsePositiveInt(this.autoIntervalInput.value, DEFAULT_AUTO_INTERVAL_MIN, 1, 1440);
+    const toggleThreshold = this.parsePositiveInt(this.autoToggleThresholdInput.value, 5, 0, 100);
     this.autoConcurrencyInput.value = String(concurrency);
     this.autoBatchDelayInput.value = String(batchDelayMs);
     this.autoIntervalInput.value = String(intervalMin);
-    this.autoConfigRef.value = { concurrency, batchDelayMs, intervalMin };
+    this.autoToggleThresholdInput.value = String(toggleThreshold);
+    this.autoConfigRef.value = { concurrency, batchDelayMs, intervalMin, toggleThreshold };
   }
 
   private waitForUnpause(phase: AutoPausedFrom): Promise<void> {
@@ -449,6 +468,9 @@ class CodexMonitorState {
       this.autoRunStatus.value = "pausing";
     } else if (this.autoRunStatus.value === "deleting") {
       this.autoPausedFrom.value = "deleting";
+      this.autoRunStatus.value = "pausing";
+    } else if (this.autoRunStatus.value === "toggling") {
+      this.autoPausedFrom.value = "toggling";
       this.autoRunStatus.value = "pausing";
     } else if (this.autoRunStatus.value === "waiting") {
       this.autoPausedFrom.value = "waiting";
@@ -477,6 +499,8 @@ class CodexMonitorState {
     this.autoScanTotal.value = 0;
     this.autoDeleteProcessed.value = 0;
     this.autoDeleteTotal.value = 0;
+    this.autoToggleProcessed.value = 0;
+    this.autoToggleTotal.value = 0;
     this.autoCleanableItems.value = [];
     this.autoPausedFrom.value = null;
   }
@@ -513,10 +537,14 @@ class CodexMonitorState {
 
       if (!this.autoRunningRef.value) break;
 
+      this.resultMessage.value = "";
+      this.resultMessageType.value = "";
+
       const roundStart = Date.now();
       const config = this.autoConfigRef.value;
       const cleanableNames: string[] = [];
       const cleanableReasons = new Map<string, CleanableReason>();
+      const okFileQuotas: { file: AuthFileItem; weeklyUsedPercent: number }[] = [];
 
       this.autoScanTotal.value = files.length;
       this.autoScanProcessed.value = 0;
@@ -533,10 +561,16 @@ class CodexMonitorState {
         const batch = files.slice(i, i + config.concurrency);
         const results = await Promise.all(batch.map((file) => this.checkFile(file)));
         results.forEach((outcome, idx) => {
-          if (outcome.kind !== "expired") return;
-          const name = batch[idx].name;
-          cleanableNames.push(name);
-          cleanableReasons.set(name, this.reasonFromStatus(outcome.statusCode ?? null));
+          if (outcome.kind === "expired") {
+            const name = batch[idx].name;
+            cleanableNames.push(name);
+            cleanableReasons.set(name, this.reasonFromStatus(outcome.statusCode ?? null));
+          } else if (outcome.kind === "ok" && outcome.quotaPayload) {
+            const wp = this.extractWeeklyUsedPercent(outcome.quotaPayload);
+            if (wp !== null) {
+              okFileQuotas.push({ file: batch[idx], weeklyUsedPercent: wp });
+            }
+          }
         });
         processed += batch.length;
         this.autoScanProcessed.value = processed;
@@ -551,12 +585,12 @@ class CodexMonitorState {
 
       if (!this.autoRunningRef.value) break;
 
+      let deletedCount = 0;
       if (cleanableNames.length > 0) {
         this.autoRunStatus.value = "deleting";
         this.autoDeleteTotal.value = cleanableNames.length;
         this.autoDeleteProcessed.value = 0;
         const deletedNames: string[] = [];
-        let deletedCount = 0;
         let failedCount = 0;
 
         for (let i = 0; i < cleanableNames.length; i += DELETE_BATCH_SIZE) {
@@ -598,11 +632,80 @@ class CodexMonitorState {
         }
       }
 
+      if (!this.autoRunningRef.value) break;
+
+      let toggleDisabledCount = 0;
+      let toggleEnabledCount = 0;
+      const toggleThreshold = config.toggleThreshold;
+
+      if (toggleThreshold > 0 && okFileQuotas.length > 0) {
+        const cutoff = 100 - toggleThreshold;
+        const toDisable: string[] = [];
+        const toEnable: string[] = [];
+
+        for (const { file, weeklyUsedPercent } of okFileQuotas) {
+          if (weeklyUsedPercent > cutoff && !file.disabled) {
+            toDisable.push(file.name);
+          } else if (weeklyUsedPercent <= (100 - ENABLE_REMAINING_THRESHOLD) && file.disabled) {
+            toEnable.push(file.name);
+          }
+        }
+
+        const allToggle = [
+          ...toDisable.map((name) => ({ name, disabled: true })),
+          ...toEnable.map((name) => ({ name, disabled: false })),
+        ];
+
+        if (allToggle.length > 0) {
+          this.autoRunStatus.value = "toggling";
+          this.autoToggleTotal.value = allToggle.length;
+          this.autoToggleProcessed.value = 0;
+
+          for (let i = 0; i < allToggle.length; i += DELETE_BATCH_SIZE) {
+            if (!this.autoRunningRef.value) break;
+            if (this.autoPausedRef.value) {
+              await this.waitForUnpause("toggling");
+              if (!this.autoRunningRef.value) break;
+              this.autoRunStatus.value = "toggling";
+            }
+            const batch = allToggle.slice(i, i + DELETE_BATCH_SIZE);
+            const results = await Promise.allSettled(
+              batch.map(({ name, disabled }) => setAuthFileStatus(name, disabled)),
+            );
+            results.forEach((result, idx) => {
+              if (result.status === "fulfilled") {
+                if (batch[idx].disabled) toggleDisabledCount += 1;
+                else toggleEnabledCount += 1;
+              }
+            });
+            this.autoToggleProcessed.value = Math.min(i + batch.length, allToggle.length);
+            if (i + DELETE_BATCH_SIZE < allToggle.length) {
+              await this.sleep(DELETE_BATCH_DELAY_MS);
+            }
+          }
+
+          if (!this.autoRunningRef.value) break;
+
+          if (toggleDisabledCount + toggleEnabledCount > 0) {
+            this.authFilesStore.fetchFiles().catch(() => {});
+          }
+
+          const parts: string[] = [];
+          if (toggleDisabledCount > 0) parts.push(`关闭 ${toggleDisabledCount} 个`);
+          if (toggleEnabledCount > 0) parts.push(`开启 ${toggleEnabledCount} 个`);
+          if (parts.length > 0) {
+            const prevMsg = this.resultMessage.value;
+            this.resultMessage.value = prevMsg ? `${prevMsg}；额度管理：${parts.join("，")}` : `额度管理：${parts.join("，")}`;
+            this.resultMessageType.value = "success";
+          }
+        }
+      }
+
       const durationMs = Date.now() - roundStart;
       this.autoLastDurationMs.value = durationMs;
-      this.autoLastResult.value = { scanned: files.length, deleted: cleanableNames.length };
+      this.autoLastResult.value = { scanned: files.length, deleted: deletedCount, disabled: toggleDisabledCount, enabled: toggleEnabledCount };
       this.autoHistory.value = [
-        { timestamp: roundStart, scanned: files.length, deleted: cleanableNames.length, durationMs },
+        { timestamp: roundStart, scanned: files.length, deleted: deletedCount, disabled: toggleDisabledCount, enabled: toggleEnabledCount, durationMs },
         ...this.autoHistory.value,
       ].slice(0, AUTO_HISTORY_MAX);
 

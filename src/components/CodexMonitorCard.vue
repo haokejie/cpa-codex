@@ -47,6 +47,9 @@ const {
   autoConcurrencyInput,
   autoBatchDelayInput,
   autoIntervalInput,
+  autoToggleThresholdInput,
+  autoToggleProcessed,
+  autoToggleTotal,
   autoConfigRef,
   confirmOpen,
   confirmMessage,
@@ -75,6 +78,7 @@ const autoConfigOpen = ref(false);
 const autoConfigConcurrencyDraft = ref("");
 const autoConfigBatchDelayDraft = ref("");
 const autoConfigIntervalDraft = ref("");
+const autoConfigToggleThresholdDraft = ref("");
 
 const autoHistoryOpen = ref(false);
 
@@ -90,10 +94,15 @@ const autoDeletePercent = computed(() =>
   autoDeleteTotal.value > 0 ? Math.round((autoDeleteProcessed.value / autoDeleteTotal.value) * 100) : 0
 );
 
+const autoTogglePercent = computed(() =>
+  autoToggleTotal.value > 0 ? Math.round((autoToggleProcessed.value / autoToggleTotal.value) * 100) : 0
+);
+
 const openAutoConfig = () => {
   autoConfigConcurrencyDraft.value = autoConcurrencyInput.value;
   autoConfigBatchDelayDraft.value = autoBatchDelayInput.value;
   autoConfigIntervalDraft.value = autoIntervalInput.value;
+  autoConfigToggleThresholdDraft.value = autoToggleThresholdInput.value;
   autoConfigOpen.value = true;
 };
 
@@ -106,6 +115,7 @@ const saveAutoConfig = () => {
   autoConcurrencyInput.value = autoConfigConcurrencyDraft.value;
   autoBatchDelayInput.value = autoConfigBatchDelayDraft.value;
   autoIntervalInput.value = autoConfigIntervalDraft.value;
+  autoToggleThresholdInput.value = autoConfigToggleThresholdDraft.value;
   normalizeAutoInputs();
   autoConfigOpen.value = false;
 };
@@ -303,6 +313,8 @@ const saveAutoConfig = () => {
             <span class="config-chip">批次 {{ autoConfigRef.batchDelayMs }}ms</span>
             <span class="config-sep"></span>
             <span class="config-chip">间隔 {{ autoConfigRef.intervalMin }} 分钟</span>
+            <span class="config-sep"></span>
+            <span class="config-chip">阈值 {{ autoConfigRef.toggleThreshold }}%</span>
           </div>
           <button class="btn-ghost btn-sm" @click="openAutoConfig">
             {{ autoIsActive ? "查看配置" : "修改配置" }}
@@ -331,6 +343,11 @@ const saveAutoConfig = () => {
                   <div class="auto-config-label">检查间隔（分钟）</div>
                   <input v-model="autoConfigIntervalDraft" type="number" min="1" max="1440" :disabled="autoIsActive" />
                   <div class="auto-config-hint">两次自动扫描的间隔</div>
+                </div>
+                <div class="auto-config-field">
+                  <div class="auto-config-label">额度阈值 (%)</div>
+                  <input v-model="autoConfigToggleThresholdDraft" type="number" min="0" max="100" :disabled="autoIsActive" />
+                  <div class="auto-config-hint">剩余低于此值自动关闭，恢复后自动开启（0 = 禁用）</div>
                 </div>
               </div>
               <div v-if="autoIsActive" class="auto-config-note">自动扫描运行中，暂停后可修改配置。</div>
@@ -371,6 +388,20 @@ const saveAutoConfig = () => {
             </div>
           </template>
 
+          <template v-else-if="autoRunStatus === 'toggling' || autoPausedFrom === 'toggling'">
+            <div class="live-label-row">
+              <span class="live-label">开关进度</span>
+              <span class="live-count live-count-teal">{{ autoToggleProcessed }} / {{ autoToggleTotal }}</span>
+            </div>
+            <div class="progress-track">
+              <div class="progress-fill progress-fill-teal" :style="{ width: autoTogglePercent + '%' }"></div>
+            </div>
+            <div class="live-meta-row">
+              <span class="live-percent">{{ autoTogglePercent }}%</span>
+              <span class="live-remaining">剩余 {{ Math.max(0, autoToggleTotal - autoToggleProcessed) }} 个</span>
+            </div>
+          </template>
+
           <template v-else-if="autoRunStatus === 'waiting' || autoPausedFrom === 'waiting'">
             <div class="countdown">
               <span class="countdown-value">{{ formatCountdown(autoCountdown) }}</span>
@@ -400,6 +431,15 @@ const saveAutoConfig = () => {
               <div class="stat-value success">{{ autoLastResult.scanned - autoLastResult.deleted }}</div>
               <div class="stat-label">正常账号数</div>
             </div>
+            <div v-if="autoLastResult.disabled > 0 || autoLastResult.enabled > 0" class="stat-card">
+              <div class="stat-icon stat-icon-toggle">⇅</div>
+              <div class="stat-value toggle">
+                <span v-if="autoLastResult.disabled > 0">-{{ autoLastResult.disabled }}</span>
+                <span v-if="autoLastResult.disabled > 0 && autoLastResult.enabled > 0"> / </span>
+                <span v-if="autoLastResult.enabled > 0" class="success">+{{ autoLastResult.enabled }}</span>
+              </div>
+              <div class="stat-label">关闭 / 开启</div>
+            </div>
           </div>
         </template>
 
@@ -419,6 +459,7 @@ const saveAutoConfig = () => {
                   <th>扫描数</th>
                   <th>清理数</th>
                   <th>正常</th>
+                  <th>关/开</th>
                   <th>耗时</th>
                 </tr>
               </thead>
@@ -429,6 +470,14 @@ const saveAutoConfig = () => {
                   <td>{{ entry.scanned }}</td>
                   <td :class="entry.deleted > 0 ? 'history-deleted' : ''">{{ entry.deleted }}</td>
                   <td :class="(entry.scanned - entry.deleted) > 0 ? 'history-healthy' : ''">{{ entry.scanned - entry.deleted }}</td>
+                  <td>
+                    <span v-if="entry.disabled > 0 || entry.enabled > 0">
+                      <span v-if="entry.disabled > 0" class="history-deleted">-{{ entry.disabled }}</span>
+                      <span v-if="entry.disabled > 0 && entry.enabled > 0"> / </span>
+                      <span v-if="entry.enabled > 0" class="history-healthy">+{{ entry.enabled }}</span>
+                    </span>
+                    <span v-else class="history-muted">-</span>
+                  </td>
                   <td class="history-muted">{{ (entry.durationMs / 1000).toFixed(1) }}s</td>
                 </tr>
               </tbody>
@@ -1065,6 +1114,26 @@ const saveAutoConfig = () => {
   transition: width 0.2s ease;
 }
 
+.progress-fill-teal {
+  height: 100%;
+  background: linear-gradient(90deg, #2DD4BF, #14B8A6);
+  border-radius: 999px;
+  transition: width 0.2s ease;
+}
+
+.live-count-teal {
+  color: #0D9488;
+}
+
+.stat-value.toggle {
+  color: #B45309;
+}
+
+.stat-icon-toggle {
+  background: #F0FDFA;
+  color: #0D9488;
+}
+
 .countdown {
   display: flex;
   align-items: baseline;
@@ -1081,7 +1150,7 @@ const saveAutoConfig = () => {
 
 .auto-result {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 12px;
 }
 
