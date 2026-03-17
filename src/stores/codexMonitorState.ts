@@ -585,55 +585,17 @@ class CodexMonitorState {
 
       if (!this.autoRunningRef.value) break;
 
-      let deletedCount = 0;
-      if (cleanableNames.length > 0) {
-        this.autoRunStatus.value = "deleting";
-        this.autoDeleteTotal.value = cleanableNames.length;
-        this.autoDeleteProcessed.value = 0;
-        const deletedNames: string[] = [];
-        let failedCount = 0;
-
-        for (let i = 0; i < cleanableNames.length; i += DELETE_BATCH_SIZE) {
-          if (!this.autoRunningRef.value) break;
-          if (this.autoPausedRef.value) {
-            await this.waitForUnpause("deleting");
-            if (!this.autoRunningRef.value) break;
-            this.autoRunStatus.value = "deleting";
-          }
-          const batch = cleanableNames.slice(i, i + DELETE_BATCH_SIZE);
-          const results = await Promise.allSettled(batch.map((name) => deleteAuthFile(name)));
-          results.forEach((result, idx) => {
-            if (result.status === "fulfilled") {
-              deletedCount += 1;
-              deletedNames.push(batch[idx]);
-            } else {
-              failedCount += 1;
-            }
-          });
-          this.autoDeleteProcessed.value = Math.min(i + batch.length, cleanableNames.length);
-          if (i + DELETE_BATCH_SIZE < cleanableNames.length) {
-            await this.sleep(DELETE_BATCH_DELAY_MS);
-          }
-        }
-
-        if (!this.autoRunningRef.value) break;
-        if (deletedNames.length > 0) {
-          const deletedSet = new Set(deletedNames);
-          this.monitorFiles.value = this.monitorFiles.value.filter((file) => !deletedSet.has(file.name));
-          this.monitorFilesBackup.value = this.monitorFiles.value.length ? this.monitorFiles.value : this.monitorFilesBackup.value;
-          this.authFilesStore.fetchFiles().catch(() => {});
-        }
-        if (failedCount > 0) {
-          this.resultMessage.value = `自动清理完成：成功 ${deletedCount} 个，失败 ${failedCount} 个`;
+      const appendResultMessage = (text: string, type: "success" | "warning") => {
+        if (!text) return;
+        this.resultMessage.value = this.resultMessage.value ? `${this.resultMessage.value}；${text}` : text;
+        if (type === "warning") {
           this.resultMessageType.value = "warning";
-        } else if (deletedCount > 0) {
-          this.resultMessage.value = `自动清理完成：删除 ${deletedCount} 个失效账号`;
-          this.resultMessageType.value = "success";
+        } else if (!this.resultMessageType.value) {
+          this.resultMessageType.value = type;
         }
-      }
+      };
 
-      if (!this.autoRunningRef.value) break;
-
+      let deletedCount = 0;
       let toggleDisabledCount = 0;
       let toggleEnabledCount = 0;
       const toggleThreshold = config.toggleThreshold;
@@ -694,10 +656,54 @@ class CodexMonitorState {
           if (toggleDisabledCount > 0) parts.push(`关闭 ${toggleDisabledCount} 个`);
           if (toggleEnabledCount > 0) parts.push(`开启 ${toggleEnabledCount} 个`);
           if (parts.length > 0) {
-            const prevMsg = this.resultMessage.value;
-            this.resultMessage.value = prevMsg ? `${prevMsg}；额度管理：${parts.join("，")}` : `额度管理：${parts.join("，")}`;
-            this.resultMessageType.value = "success";
+            appendResultMessage(`额度管理：${parts.join("，")}`, "success");
           }
+        }
+      }
+
+      if (!this.autoRunningRef.value) break;
+
+      if (cleanableNames.length > 0) {
+        this.autoRunStatus.value = "deleting";
+        this.autoDeleteTotal.value = cleanableNames.length;
+        this.autoDeleteProcessed.value = 0;
+        const deletedNames: string[] = [];
+        let failedCount = 0;
+
+        for (let i = 0; i < cleanableNames.length; i += DELETE_BATCH_SIZE) {
+          if (!this.autoRunningRef.value) break;
+          if (this.autoPausedRef.value) {
+            await this.waitForUnpause("deleting");
+            if (!this.autoRunningRef.value) break;
+            this.autoRunStatus.value = "deleting";
+          }
+          const batch = cleanableNames.slice(i, i + DELETE_BATCH_SIZE);
+          const results = await Promise.allSettled(batch.map((name) => deleteAuthFile(name)));
+          results.forEach((result, idx) => {
+            if (result.status === "fulfilled") {
+              deletedCount += 1;
+              deletedNames.push(batch[idx]);
+            } else {
+              failedCount += 1;
+            }
+          });
+          this.autoDeleteProcessed.value = Math.min(i + batch.length, cleanableNames.length);
+          if (i + DELETE_BATCH_SIZE < cleanableNames.length) {
+            await this.sleep(DELETE_BATCH_DELAY_MS);
+          }
+        }
+
+        if (!this.autoRunningRef.value) break;
+        if (deletedNames.length > 0) {
+          const deletedSet = new Set(deletedNames);
+          this.monitorFiles.value = this.monitorFiles.value.filter((file) => !deletedSet.has(file.name));
+          this.monitorFilesBackup.value = this.monitorFiles.value.length ? this.monitorFiles.value : this.monitorFilesBackup.value;
+          this.authFilesStore.fetchFiles().catch(() => {});
+        }
+        if (failedCount > 0) {
+          appendResultMessage(`自动清理完成：成功 ${deletedCount} 个，失败 ${failedCount} 个`, "warning");
+        } else if (deletedCount > 0) {
+          appendResultMessage(`自动清理完成：删除 ${deletedCount} 个失效账号`, "success");
         }
       }
 
