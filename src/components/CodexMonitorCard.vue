@@ -18,6 +18,7 @@ const {
   cleanableAccounts,
   healthyCount,
   skippedCount,
+  disabledCount,
   fetchingFiles,
   totalCount,
   resultMessage,
@@ -37,6 +38,7 @@ const {
   autoHasLivePanel,
   autoScanProcessed,
   autoScanTotal,
+  autoScanSkipped,
   autoDeleteProcessed,
   autoDeleteTotal,
   autoCountdown,
@@ -48,6 +50,7 @@ const {
   autoBatchDelayInput,
   autoIntervalInput,
   autoToggleThresholdInput,
+  autoCooldownHoursInput,
   autoToggleProcessed,
   autoToggleTotal,
   autoConfigRef,
@@ -79,8 +82,37 @@ const autoConfigConcurrencyDraft = ref("");
 const autoConfigBatchDelayDraft = ref("");
 const autoConfigIntervalDraft = ref("");
 const autoConfigToggleThresholdDraft = ref("");
+const autoConfigCooldownHoursDraft = ref("");
 
 const autoHistoryOpen = ref(false);
+
+const autoConfigErrors = computed(() => {
+  const toInt = (value: string) => {
+    if (value.trim() === "") return null;
+    const n = Number(value);
+    if (!Number.isFinite(n) || !Number.isInteger(n)) return null;
+    return n;
+  };
+
+  const rangeError = (value: string, min: number, max: number, label: string) => {
+    const n = toInt(value);
+    if (n === null) return `${label}需为整数`;
+    if (n < min || n > max) return `${label}范围 ${min}~${max}`;
+    return "";
+  };
+
+  return {
+    concurrency: rangeError(autoConfigConcurrencyDraft.value, 1, 50, "并发数量"),
+    batchDelay: rangeError(autoConfigBatchDelayDraft.value, 0, 60000, "批次间隔"),
+    interval: rangeError(autoConfigIntervalDraft.value, 1, 1440, "检查间隔"),
+    toggleThreshold: rangeError(autoConfigToggleThresholdDraft.value, 0, 100, "额度阈值"),
+    cooldown: rangeError(autoConfigCooldownHoursDraft.value, 1, 168, "冷却时长"),
+  };
+});
+
+const autoConfigInvalid = computed(() =>
+  Object.values(autoConfigErrors.value).some((message) => Boolean(message)),
+);
 
 const autoTotalDeleted = computed(() =>
   autoHistory.value.reduce((sum: number, h: { deleted: number }) => sum + h.deleted, 0)
@@ -103,6 +135,7 @@ const openAutoConfig = () => {
   autoConfigBatchDelayDraft.value = autoBatchDelayInput.value;
   autoConfigIntervalDraft.value = autoIntervalInput.value;
   autoConfigToggleThresholdDraft.value = autoToggleThresholdInput.value;
+  autoConfigCooldownHoursDraft.value = autoCooldownHoursInput.value;
   autoConfigOpen.value = true;
 };
 
@@ -111,11 +144,12 @@ const closeAutoConfig = () => {
 };
 
 const saveAutoConfig = () => {
-  if (autoIsActive.value) return;
+  if (autoIsActive.value || autoConfigInvalid.value) return;
   autoConcurrencyInput.value = autoConfigConcurrencyDraft.value;
   autoBatchDelayInput.value = autoConfigBatchDelayDraft.value;
   autoIntervalInput.value = autoConfigIntervalDraft.value;
   autoToggleThresholdInput.value = autoConfigToggleThresholdDraft.value;
+  autoCooldownHoursInput.value = autoConfigCooldownHoursDraft.value;
   normalizeAutoInputs();
   autoConfigOpen.value = false;
 };
@@ -155,6 +189,12 @@ const saveAutoConfig = () => {
             {{ scanStatus === "idle" ? "-" : skippedCount }}
           </div>
           <div class="stat-label">跳过</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value muted">
+            {{ disabledCount }}
+          </div>
+          <div class="stat-label">已关闭</div>
         </div>
       </div>
 
@@ -315,6 +355,8 @@ const saveAutoConfig = () => {
             <span class="config-chip">间隔 {{ autoConfigRef.intervalMin }} 分钟</span>
             <span class="config-sep"></span>
             <span class="config-chip">阈值 {{ autoConfigRef.toggleThreshold }}%</span>
+            <span class="config-sep"></span>
+            <span class="config-chip">冷却 {{ autoConfigRef.cooldownHours }}h</span>
           </div>
           <button class="btn-ghost btn-sm" @click="openAutoConfig">
             {{ autoIsActive ? "查看配置" : "修改配置" }}
@@ -331,30 +373,53 @@ const saveAutoConfig = () => {
               <div class="auto-config-form">
                 <div class="auto-config-field">
                   <div class="auto-config-label">并发数量</div>
-                  <input v-model="autoConfigConcurrencyDraft" type="number" min="1" max="50" :disabled="autoIsActive" />
-                  <div class="auto-config-hint">同时检测的账号数量</div>
+                  <input v-model="autoConfigConcurrencyDraft" class="auto-config-input" type="number" min="1" max="50"
+                    :class="{ 'input-error': autoConfigErrors.concurrency }" :disabled="autoIsActive" />
+                  <div class="auto-config-hint" :class="{ 'auto-config-error': autoConfigErrors.concurrency }">
+                    {{ autoConfigErrors.concurrency || "同时检测的账号数量" }}
+                  </div>
                 </div>
                 <div class="auto-config-field">
                   <div class="auto-config-label">批次间隔 (ms)</div>
-                  <input v-model="autoConfigBatchDelayDraft" type="number" min="0" max="60000" :disabled="autoIsActive" />
-                  <div class="auto-config-hint">每批检测之间的等待时间</div>
+                  <input v-model="autoConfigBatchDelayDraft" class="auto-config-input" type="number" min="0" max="60000"
+                    :class="{ 'input-error': autoConfigErrors.batchDelay }" :disabled="autoIsActive" />
+                  <div class="auto-config-hint" :class="{ 'auto-config-error': autoConfigErrors.batchDelay }">
+                    {{ autoConfigErrors.batchDelay || "每批检测之间的等待时间" }}
+                  </div>
                 </div>
                 <div class="auto-config-field">
                   <div class="auto-config-label">检查间隔（分钟）</div>
-                  <input v-model="autoConfigIntervalDraft" type="number" min="1" max="1440" :disabled="autoIsActive" />
-                  <div class="auto-config-hint">两次自动扫描的间隔</div>
+                  <input v-model="autoConfigIntervalDraft" class="auto-config-input" type="number" min="1" max="1440"
+                    :class="{ 'input-error': autoConfigErrors.interval }" :disabled="autoIsActive" />
+                  <div class="auto-config-hint" :class="{ 'auto-config-error': autoConfigErrors.interval }">
+                    {{ autoConfigErrors.interval || "两次自动扫描的间隔" }}
+                  </div>
                 </div>
                 <div class="auto-config-field">
                   <div class="auto-config-label">额度阈值 (%)</div>
-                  <input v-model="autoConfigToggleThresholdDraft" type="number" min="0" max="100" :disabled="autoIsActive" />
-                  <div class="auto-config-hint">剩余低于此值自动关闭，恢复后自动开启（0 = 禁用）</div>
+                  <input v-model="autoConfigToggleThresholdDraft" class="auto-config-input" type="number" min="0" max="100"
+                    :class="{ 'input-error': autoConfigErrors.toggleThreshold }" :disabled="autoIsActive" />
+                  <div class="auto-config-hint" :class="{ 'auto-config-error': autoConfigErrors.toggleThreshold }">
+                    {{ autoConfigErrors.toggleThreshold || "剩余低于此值自动关闭，恢复后自动开启（0 = 禁用）" }}
+                  </div>
+                </div>
+                <div class="auto-config-field">
+                  <div class="auto-config-label">冷却时长（小时）</div>
+                  <input v-model="autoConfigCooldownHoursDraft" class="auto-config-input" type="number" min="1" max="168"
+                    :class="{ 'input-error': autoConfigErrors.cooldown }" :disabled="autoIsActive" />
+                  <div class="auto-config-hint" :class="{ 'auto-config-error': autoConfigErrors.cooldown }">
+                    {{ autoConfigErrors.cooldown || "额度耗尽账号在冷却期内跳过扫描" }}
+                  </div>
                 </div>
               </div>
               <div v-if="autoIsActive" class="auto-config-note">自动扫描运行中，暂停后可修改配置。</div>
             </div>
             <div class="dialog-footer">
               <button class="btn-ghost" @click="closeAutoConfig">取消</button>
-              <button class="btn-ghost btn-primary" :disabled="autoIsActive" @click="saveAutoConfig">保存配置</button>
+              <button class="btn-ghost btn-primary" :disabled="autoIsActive || autoConfigInvalid"
+                @click="saveAutoConfig">
+                保存配置
+              </button>
             </div>
           </div>
         </div>
@@ -371,6 +436,9 @@ const saveAutoConfig = () => {
             <div class="live-meta-row">
               <span class="live-percent">{{ autoScanPercent }}%</span>
               <span class="live-remaining">剩余 {{ Math.max(0, autoScanTotal - autoScanProcessed) }} 个</span>
+            </div>
+            <div class="live-meta-row" v-if="autoScanSkipped > 0">
+              <span class="live-remaining">冷却跳过 {{ autoScanSkipped }} 个</span>
             </div>
           </template>
 
@@ -428,8 +496,15 @@ const saveAutoConfig = () => {
             </div>
             <div class="stat-card">
               <div class="stat-icon stat-icon-success">✓</div>
-              <div class="stat-value success">{{ autoLastResult.scanned - autoLastResult.deleted }}</div>
+              <div class="stat-value success">
+                {{ Math.max(0, autoLastResult.scanned - autoLastResult.deleted - (autoLastResult.skipped ?? 0)) }}
+              </div>
               <div class="stat-label">正常账号数</div>
+            </div>
+            <div v-if="(autoLastResult.skipped ?? 0) > 0" class="stat-card">
+              <div class="stat-icon stat-icon-muted">⏸</div>
+              <div class="stat-value muted">{{ autoLastResult.skipped }}</div>
+              <div class="stat-label">跳过账号数</div>
             </div>
             <div v-if="autoLastResult.disabled > 0 || autoLastResult.enabled > 0" class="stat-card">
               <div class="stat-icon stat-icon-toggle">⇅</div>
@@ -459,6 +534,7 @@ const saveAutoConfig = () => {
                   <th>扫描数</th>
                   <th>清理数</th>
                   <th>正常</th>
+                  <th>跳过</th>
                   <th>关/开</th>
                   <th>耗时</th>
                 </tr>
@@ -469,7 +545,10 @@ const saveAutoConfig = () => {
                   <td class="history-time">{{ new Date(entry.timestamp).toLocaleTimeString() }}</td>
                   <td>{{ entry.scanned }}</td>
                   <td :class="entry.deleted > 0 ? 'history-deleted' : ''">{{ entry.deleted }}</td>
-                  <td :class="(entry.scanned - entry.deleted) > 0 ? 'history-healthy' : ''">{{ entry.scanned - entry.deleted }}</td>
+                  <td :class="(entry.scanned - entry.deleted - entry.skipped) > 0 ? 'history-healthy' : ''">
+                    {{ Math.max(0, entry.scanned - entry.deleted - entry.skipped) }}
+                  </td>
+                  <td :class="entry.skipped > 0 ? 'history-muted' : ''">{{ entry.skipped }}</td>
                   <td>
                     <span v-if="entry.disabled > 0 || entry.enabled > 0">
                       <span v-if="entry.disabled > 0" class="history-deleted">-{{ entry.disabled }}</span>
@@ -942,6 +1021,10 @@ const saveAutoConfig = () => {
   flex-wrap: wrap;
 }
 
+.auto-hero-actions .btn-primary {
+  margin-left: auto;
+}
+
 .auto-config-bar {
   border: 1px solid var(--zinc-200);
   border-radius: 10px;
@@ -1023,15 +1106,16 @@ const saveAutoConfig = () => {
 }
 
 .auto-config-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px 14px;
 }
 
 .auto-config-field {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
+  min-width: 0;
 }
 
 .auto-config-field input {
@@ -1040,6 +1124,24 @@ const saveAutoConfig = () => {
   border-radius: 6px;
   font-size: 12px;
   color: var(--zinc-700);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.auto-config-hint {
+  font-size: 11px;
+  color: var(--zinc-400);
+  line-height: 1.2;
+}
+
+.auto-config-input.input-error {
+  border-color: #fca5a5;
+  background: #fef2f2;
+  color: #b91c1c;
+}
+
+.auto-config-error {
+  color: #dc2626;
 }
 
 .auto-config-note {
@@ -1050,6 +1152,12 @@ const saveAutoConfig = () => {
   border: 1px solid #fde68a;
   padding: 8px 10px;
   border-radius: 8px;
+}
+
+@media (max-width: 520px) {
+  .auto-config-form {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .auto-live {
@@ -1197,6 +1305,11 @@ const saveAutoConfig = () => {
 .stat-icon-success {
   background: #F0FDF4;
   color: #16A34A;
+}
+
+.stat-icon-muted {
+  background: #F4F4F5;
+  color: #71717A;
 }
 
 .auto-history {
