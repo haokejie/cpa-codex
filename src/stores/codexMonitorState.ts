@@ -3,6 +3,7 @@ import type { AuthFileItem } from "../types";
 import { useAuthFilesStore } from "./authFiles";
 import { deleteAuthFile, listAuthFiles, setAuthFileStatus } from "../api/authFiles";
 import { getCodexQuotaByAuthIndex } from "../api/codex";
+import { readAutoMonitorConfig, writeAutoMonitorConfig, type AutoMonitorConfig } from "../api/monitorConfig";
 import { normalizeAuthIndex } from "../utils/usage";
 import {
   resolveCodexChatgptAccountId,
@@ -108,7 +109,7 @@ class CodexMonitorState {
   autoIntervalInput = ref(String(DEFAULT_AUTO_INTERVAL_MIN));
   autoCooldownHoursInput = ref(String(DEFAULT_COOLDOWN_HOURS));
 
-  autoConfigRef = ref({
+  autoConfigRef = ref<AutoMonitorConfig>({
     concurrency: DEFAULT_BATCH_SIZE,
     batchDelayMs: BATCH_DELAY_MS,
     intervalMin: DEFAULT_AUTO_INTERVAL_MIN,
@@ -142,6 +143,8 @@ class CodexMonitorState {
 
   private constructor() {
     this.scope.run(() => {
+      this.applyStoredAutoConfig();
+
       this.codexFiles = computed(() =>
         (this.monitorFiles.value ?? []).filter((file) => this.isCodexFile(file) && !this.isRuntimeOnly(file)),
       );
@@ -202,13 +205,11 @@ class CodexMonitorState {
           this.autoCooldownHoursInput,
         ],
         () => {
-        const concurrency = this.parsePositiveInt(this.autoConcurrencyInput.value, DEFAULT_BATCH_SIZE, 1, 50);
-        const batchDelayMs = this.parsePositiveInt(this.autoBatchDelayInput.value, BATCH_DELAY_MS, 0, 60000);
-        const intervalMin = this.parsePositiveInt(this.autoIntervalInput.value, DEFAULT_AUTO_INTERVAL_MIN, 1, 1440);
-        const toggleThreshold = this.parsePositiveInt(this.autoToggleThresholdInput.value, 5, 0, 100);
-        const cooldownHours = this.parsePositiveInt(this.autoCooldownHoursInput.value, DEFAULT_COOLDOWN_HOURS, 1, 168);
-        this.autoConfigRef.value = { concurrency, batchDelayMs, intervalMin, toggleThreshold, cooldownHours };
-      });
+          const config = this.resolveAutoConfigFromInputs();
+          this.autoConfigRef.value = config;
+          this.persistAutoConfig(config);
+        },
+      );
 
       watch(this.autoEnabled, (enabled) => {
         if (enabled) {
@@ -539,18 +540,38 @@ class CodexMonitorState {
     return Math.min(max, Math.max(min, n));
   }
 
-  normalizeAutoInputs() {
+  private resolveAutoConfigFromInputs(): AutoMonitorConfig {
     const concurrency = this.parsePositiveInt(this.autoConcurrencyInput.value, DEFAULT_BATCH_SIZE, 1, 50);
     const batchDelayMs = this.parsePositiveInt(this.autoBatchDelayInput.value, BATCH_DELAY_MS, 0, 60000);
     const intervalMin = this.parsePositiveInt(this.autoIntervalInput.value, DEFAULT_AUTO_INTERVAL_MIN, 1, 1440);
     const toggleThreshold = this.parsePositiveInt(this.autoToggleThresholdInput.value, 5, 0, 100);
     const cooldownHours = this.parsePositiveInt(this.autoCooldownHoursInput.value, DEFAULT_COOLDOWN_HOURS, 1, 168);
-    this.autoConcurrencyInput.value = String(concurrency);
-    this.autoBatchDelayInput.value = String(batchDelayMs);
-    this.autoIntervalInput.value = String(intervalMin);
-    this.autoToggleThresholdInput.value = String(toggleThreshold);
-    this.autoCooldownHoursInput.value = String(cooldownHours);
-    this.autoConfigRef.value = { concurrency, batchDelayMs, intervalMin, toggleThreshold, cooldownHours };
+    return { concurrency, batchDelayMs, intervalMin, toggleThreshold, cooldownHours };
+  }
+
+  private applyStoredAutoConfig() {
+    const stored = readAutoMonitorConfig();
+    if (!stored) return;
+    if (stored.concurrency !== undefined) this.autoConcurrencyInput.value = String(stored.concurrency);
+    if (stored.batchDelayMs !== undefined) this.autoBatchDelayInput.value = String(stored.batchDelayMs);
+    if (stored.intervalMin !== undefined) this.autoIntervalInput.value = String(stored.intervalMin);
+    if (stored.toggleThreshold !== undefined) this.autoToggleThresholdInput.value = String(stored.toggleThreshold);
+    if (stored.cooldownHours !== undefined) this.autoCooldownHoursInput.value = String(stored.cooldownHours);
+    this.normalizeAutoInputs();
+  }
+
+  private persistAutoConfig(config: AutoMonitorConfig) {
+    writeAutoMonitorConfig(config);
+  }
+
+  normalizeAutoInputs() {
+    const config = this.resolveAutoConfigFromInputs();
+    this.autoConcurrencyInput.value = String(config.concurrency);
+    this.autoBatchDelayInput.value = String(config.batchDelayMs);
+    this.autoIntervalInput.value = String(config.intervalMin);
+    this.autoToggleThresholdInput.value = String(config.toggleThreshold);
+    this.autoCooldownHoursInput.value = String(config.cooldownHours);
+    this.autoConfigRef.value = config;
   }
 
   private waitForUnpause(phase: AutoPausedFrom): Promise<void> {
