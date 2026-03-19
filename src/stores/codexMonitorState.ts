@@ -32,6 +32,7 @@ const DEFAULT_BATCH_SIZE = 9;
 const BATCH_DELAY_MS = 2000;
 const DELETE_BATCH_SIZE = 10;
 const DELETE_BATCH_DELAY_MS = 300;
+const MONITOR_POOL_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_AUTO_INTERVAL_MIN = 60;
 const DEFAULT_COOLDOWN_HOURS = 12;
 const ENABLE_REMAINING_THRESHOLD = 95;
@@ -357,7 +358,7 @@ class CodexMonitorState {
     this.refreshing.value = true;
     this.poolWarning.value = "";
     try {
-      const items = await listAuthFiles();
+      const items = await listAuthFiles({ timeoutMs: MONITOR_POOL_TIMEOUT_MS });
       const filtered = items.filter((file) => this.isCodexFile(file) && !this.isRuntimeOnly(file));
       this.monitorFiles.value = filtered;
       this.monitorFilesBackup.value = filtered;

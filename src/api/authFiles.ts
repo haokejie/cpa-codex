@@ -7,6 +7,10 @@ type RawAuthFileItem = AuthFileItem & {
   last_refresh?: string | number;
 };
 
+type ListAuthFilesOptions = {
+  timeoutMs?: number;
+};
+
 function normalizeAuthFile(item: RawAuthFileItem): AuthFileItem {
   return {
     ...item,
@@ -15,10 +19,14 @@ function normalizeAuthFile(item: RawAuthFileItem): AuthFileItem {
   };
 }
 
-export async function listAuthFiles(): Promise<AuthFileItem[]> {
+export async function listAuthFiles(options: ListAuthFilesOptions = {}): Promise<AuthFileItem[]> {
   const session = requireSession();
   const url = buildManagementUrl(session.server, "/auth-files");
-  const body = await requestJson<unknown>(url, { auth: session.password, context: "management" });
+  const body = await requestJson<unknown>(url, {
+    auth: session.password,
+    context: "management",
+    timeoutMs: options.timeoutMs,
+  });
   const items = extractFiles(body);
   return items.map(normalizeAuthFile);
 }

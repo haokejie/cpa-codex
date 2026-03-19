@@ -1,7 +1,7 @@
 import { isTauri } from "./tauri";
 
 const MANAGEMENT_API_PREFIX = "/v0/management";
-const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_TIMEOUT_MS = 60_000;
 const MANAGEMENT_PROXY_TARGET = import.meta.env.VITE_MANAGEMENT_PROXY_TARGET;
 
 type RequestContext = "management" | "auth" | "openai";
