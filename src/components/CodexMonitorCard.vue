@@ -87,9 +87,11 @@ const autoConfigCooldownHoursDraft = ref("");
 const autoHistoryOpen = ref(false);
 
 const autoConfigErrors = computed(() => {
-  const toInt = (value: string) => {
-    if (value.trim() === "") return null;
-    const n = Number(value);
+  const toInt = (value: string | number | null | undefined) => {
+    if (value === null || value === undefined) return null;
+    const text = String(value).trim();
+    if (text === "") return null;
+    const n = Number(text);
     if (!Number.isFinite(n) || !Number.isInteger(n)) return null;
     return n;
   };
