@@ -4,6 +4,7 @@ export type AutoMonitorConfig = {
   intervalMin: number;
   toggleThreshold: number;
   cooldownHours: number;
+  autoDeleteExpired: boolean;
 };
 
 const STORAGE_KEY = "cpa-codex:monitor-auto-config";
@@ -16,11 +17,21 @@ export function readAutoMonitorConfig(): Partial<AutoMonitorConfig> | null {
   try {
     const parsed = JSON.parse(raw) as Record<string, unknown>;
     const out: Partial<AutoMonitorConfig> = {};
-    const applyNumber = (key: keyof AutoMonitorConfig) => {
+    const applyNumber = (
+      key: Exclude<keyof AutoMonitorConfig, "autoDeleteExpired">,
+    ) => {
       const value = parsed[key];
       const num = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN;
       if (Number.isFinite(num)) {
         out[key] = num;
+      }
+    };
+    const applyBoolean = (key: "autoDeleteExpired") => {
+      const value = parsed[key];
+      if (typeof value === "boolean") {
+        out[key] = value;
+      } else if (value === "true" || value === "false") {
+        out[key] = value === "true";
       }
     };
     applyNumber("concurrency");
@@ -28,6 +39,7 @@ export function readAutoMonitorConfig(): Partial<AutoMonitorConfig> | null {
     applyNumber("intervalMin");
     applyNumber("toggleThreshold");
     applyNumber("cooldownHours");
+    applyBoolean("autoDeleteExpired");
     return Object.keys(out).length > 0 ? out : null;
   } catch {
     return null;

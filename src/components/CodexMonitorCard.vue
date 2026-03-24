@@ -51,6 +51,7 @@ const {
   autoIntervalInput,
   autoToggleThresholdInput,
   autoCooldownHoursInput,
+  autoDeleteExpiredInput,
   autoToggleProcessed,
   autoToggleTotal,
   autoConfigRef,
@@ -83,6 +84,7 @@ const autoConfigBatchDelayDraft = ref("");
 const autoConfigIntervalDraft = ref("");
 const autoConfigToggleThresholdDraft = ref("");
 const autoConfigCooldownHoursDraft = ref("");
+const autoConfigAutoDeleteExpiredDraft = ref(true);
 
 const autoHistoryOpen = ref(false);
 
@@ -138,6 +140,7 @@ const openAutoConfig = () => {
   autoConfigIntervalDraft.value = autoIntervalInput.value;
   autoConfigToggleThresholdDraft.value = autoToggleThresholdInput.value;
   autoConfigCooldownHoursDraft.value = autoCooldownHoursInput.value;
+  autoConfigAutoDeleteExpiredDraft.value = autoDeleteExpiredInput.value;
   autoConfigOpen.value = true;
 };
 
@@ -152,6 +155,7 @@ const saveAutoConfig = () => {
   autoIntervalInput.value = autoConfigIntervalDraft.value;
   autoToggleThresholdInput.value = autoConfigToggleThresholdDraft.value;
   autoCooldownHoursInput.value = autoConfigCooldownHoursDraft.value;
+  autoDeleteExpiredInput.value = autoConfigAutoDeleteExpiredDraft.value;
   normalizeAutoInputs();
   autoConfigOpen.value = false;
 };
@@ -359,6 +363,8 @@ const saveAutoConfig = () => {
             <span class="config-chip">阈值 {{ autoConfigRef.toggleThreshold }}%</span>
             <span class="config-sep"></span>
             <span class="config-chip">冷却 {{ autoConfigRef.cooldownHours }}h</span>
+            <span class="config-sep"></span>
+            <span class="config-chip">自动删 {{ autoConfigRef.autoDeleteExpired ? "开" : "关" }}</span>
           </div>
           <button class="btn-ghost btn-sm" @click="openAutoConfig">
             {{ autoIsActive ? "查看配置" : "修改配置" }}
@@ -411,6 +417,16 @@ const saveAutoConfig = () => {
                     :class="{ 'input-error': autoConfigErrors.cooldown }" :disabled="autoIsActive" />
                   <div class="auto-config-hint" :class="{ 'auto-config-error': autoConfigErrors.cooldown }">
                     {{ autoConfigErrors.cooldown || "额度耗尽账号在冷却期内跳过扫描" }}
+                  </div>
+                </div>
+                <div class="auto-config-field auto-config-switch-field">
+                  <div class="auto-config-label">自动删除过期凭证</div>
+                  <label class="auto-config-switch">
+                    <input v-model="autoConfigAutoDeleteExpiredDraft" type="checkbox" :disabled="autoIsActive" />
+                    <span>{{ autoConfigAutoDeleteExpiredDraft ? "开启" : "关闭" }}</span>
+                  </label>
+                  <div class="auto-config-hint">
+                    关闭后仅扫描并标记失效账号，不自动执行删除
                   </div>
                 </div>
               </div>
@@ -492,6 +508,11 @@ const saveAutoConfig = () => {
               <div class="stat-label">扫描账号数</div>
             </div>
             <div class="stat-card">
+              <div class="stat-icon stat-icon-expired">!</div>
+              <div class="stat-value expired">{{ autoLastResult.expired }}</div>
+              <div class="stat-label">过期账号数</div>
+            </div>
+            <div class="stat-card">
               <div class="stat-icon stat-icon-danger">✕</div>
               <div class="stat-value danger">{{ autoLastResult.deleted }}</div>
               <div class="stat-label">清理账号数</div>
@@ -499,7 +520,7 @@ const saveAutoConfig = () => {
             <div class="stat-card">
               <div class="stat-icon stat-icon-success">✓</div>
               <div class="stat-value success">
-                {{ Math.max(0, autoLastResult.scanned - autoLastResult.deleted - (autoLastResult.skipped ?? 0)) }}
+                {{ Math.max(0, autoLastResult.scanned - autoLastResult.expired - (autoLastResult.skipped ?? 0)) }}
               </div>
               <div class="stat-label">正常账号数</div>
             </div>
@@ -534,6 +555,7 @@ const saveAutoConfig = () => {
                 <tr>
                   <th>执行时间</th>
                   <th>扫描数</th>
+                  <th>过期</th>
                   <th>清理数</th>
                   <th>正常</th>
                   <th>跳过</th>
@@ -546,9 +568,10 @@ const saveAutoConfig = () => {
                   :class="{ 'history-row-latest': idx === 0 }">
                   <td class="history-time">{{ new Date(entry.timestamp).toLocaleTimeString() }}</td>
                   <td>{{ entry.scanned }}</td>
+                  <td :class="entry.expired > 0 ? 'history-expired' : ''">{{ entry.expired }}</td>
                   <td :class="entry.deleted > 0 ? 'history-deleted' : ''">{{ entry.deleted }}</td>
-                  <td :class="(entry.scanned - entry.deleted - entry.skipped) > 0 ? 'history-healthy' : ''">
-                    {{ Math.max(0, entry.scanned - entry.deleted - entry.skipped) }}
+                  <td :class="(entry.scanned - entry.expired - entry.skipped) > 0 ? 'history-healthy' : ''">
+                    {{ Math.max(0, entry.scanned - entry.expired - entry.skipped) }}
                   </td>
                   <td :class="entry.skipped > 0 ? 'history-muted' : ''">{{ entry.skipped }}</td>
                   <td>
@@ -627,6 +650,10 @@ const saveAutoConfig = () => {
 
 .stat-value.danger {
   color: #dc2626;
+}
+
+.stat-value.expired {
+  color: #ea580c;
 }
 
 .stat-value.success {
@@ -1120,7 +1147,12 @@ const saveAutoConfig = () => {
   min-width: 0;
 }
 
-.auto-config-field input {
+.auto-config-switch-field {
+  justify-content: flex-start;
+  grid-column: 1 / -1;
+}
+
+.auto-config-input {
   padding: 6px 8px;
   border: 1px solid var(--zinc-200);
   border-radius: 6px;
@@ -1128,6 +1160,23 @@ const saveAutoConfig = () => {
   color: var(--zinc-700);
   width: 100%;
   box-sizing: border-box;
+}
+
+.auto-config-switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 0 2px;
+  font-size: 12px;
+  color: var(--zinc-700);
+}
+
+.auto-config-switch input {
+  width: 16px;
+  height: 16px;
+  margin: 0;
+  padding: 0;
 }
 
 .auto-config-hint {
@@ -1304,6 +1353,11 @@ const saveAutoConfig = () => {
   color: #DC2626;
 }
 
+.stat-icon-expired {
+  background: #FFF7ED;
+  color: #EA580C;
+}
+
 .stat-icon-success {
   background: #F0FDF4;
   color: #16A34A;
@@ -1396,6 +1450,11 @@ const saveAutoConfig = () => {
 
 .history-deleted {
   color: #DC2626;
+  font-weight: 500;
+}
+
+.history-expired {
+  color: #EA580C;
   font-weight: 500;
 }
 

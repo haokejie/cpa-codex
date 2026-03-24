@@ -89,14 +89,30 @@ class CodexMonitorState {
   autoEnabled = ref(false);
   autoRunStatus = ref<AutoRunStatus>("idle");
   autoCountdown = ref(0);
-  autoLastResult = ref<{ scanned: number; deleted: number; disabled: number; enabled: number; skipped: number } | null>(null);
+  autoLastResult = ref<{
+    scanned: number;
+    expired: number;
+    deleted: number;
+    disabled: number;
+    enabled: number;
+    skipped: number;
+  } | null>(null);
   autoScanProcessed = ref(0);
   autoScanTotal = ref(0);
   autoScanSkipped = ref(0);
   autoDeleteProcessed = ref(0);
   autoDeleteTotal = ref(0);
   autoCleanableItems = ref<{ name: string; reason: CleanableReason }[]>([]);
-  autoHistory = ref<{ timestamp: number; scanned: number; deleted: number; disabled: number; enabled: number; skipped: number; durationMs: number }[]>([]);
+  autoHistory = ref<{
+    timestamp: number;
+    scanned: number;
+    expired: number;
+    deleted: number;
+    disabled: number;
+    enabled: number;
+    skipped: number;
+    durationMs: number;
+  }[]>([]);
   autoLastDurationMs = ref(0);
   autoPausedFrom = ref<AutoPausedFrom | null>(null);
 
@@ -108,6 +124,7 @@ class CodexMonitorState {
   autoBatchDelayInput = ref(String(BATCH_DELAY_MS));
   autoIntervalInput = ref(String(DEFAULT_AUTO_INTERVAL_MIN));
   autoCooldownHoursInput = ref(String(DEFAULT_COOLDOWN_HOURS));
+  autoDeleteExpiredInput = ref(true);
 
   autoConfigRef = ref<AutoMonitorConfig>({
     concurrency: DEFAULT_BATCH_SIZE,
@@ -115,6 +132,7 @@ class CodexMonitorState {
     intervalMin: DEFAULT_AUTO_INTERVAL_MIN,
     toggleThreshold: 5,
     cooldownHours: DEFAULT_COOLDOWN_HOURS,
+    autoDeleteExpired: true,
   });
 
   autoRunningRef = ref(false);
@@ -203,6 +221,7 @@ class CodexMonitorState {
           this.autoIntervalInput,
           this.autoToggleThresholdInput,
           this.autoCooldownHoursInput,
+          this.autoDeleteExpiredInput,
         ],
         () => {
           const config = this.resolveAutoConfigFromInputs();
@@ -546,7 +565,8 @@ class CodexMonitorState {
     const intervalMin = this.parsePositiveInt(this.autoIntervalInput.value, DEFAULT_AUTO_INTERVAL_MIN, 1, 1440);
     const toggleThreshold = this.parsePositiveInt(this.autoToggleThresholdInput.value, 5, 0, 100);
     const cooldownHours = this.parsePositiveInt(this.autoCooldownHoursInput.value, DEFAULT_COOLDOWN_HOURS, 1, 168);
-    return { concurrency, batchDelayMs, intervalMin, toggleThreshold, cooldownHours };
+    const autoDeleteExpired = this.autoDeleteExpiredInput.value;
+    return { concurrency, batchDelayMs, intervalMin, toggleThreshold, cooldownHours, autoDeleteExpired };
   }
 
   private applyStoredAutoConfig() {
@@ -557,6 +577,7 @@ class CodexMonitorState {
     if (stored.intervalMin !== undefined) this.autoIntervalInput.value = String(stored.intervalMin);
     if (stored.toggleThreshold !== undefined) this.autoToggleThresholdInput.value = String(stored.toggleThreshold);
     if (stored.cooldownHours !== undefined) this.autoCooldownHoursInput.value = String(stored.cooldownHours);
+    if (stored.autoDeleteExpired !== undefined) this.autoDeleteExpiredInput.value = stored.autoDeleteExpired;
     this.normalizeAutoInputs();
   }
 
@@ -571,6 +592,7 @@ class CodexMonitorState {
     this.autoIntervalInput.value = String(config.intervalMin);
     this.autoToggleThresholdInput.value = String(config.toggleThreshold);
     this.autoCooldownHoursInput.value = String(config.cooldownHours);
+    this.autoDeleteExpiredInput.value = config.autoDeleteExpired;
     this.autoConfigRef.value = config;
   }
 
@@ -756,6 +778,7 @@ class CodexMonitorState {
       let toggleDisabledCount = 0;
       let toggleEnabledCount = 0;
       const toggleThreshold = config.toggleThreshold;
+      const shouldAutoDeleteExpired = config.autoDeleteExpired;
 
       if (toggleThreshold > 0 && okFileQuotas.length > 0) {
         const cutoff = 100 - toggleThreshold;
@@ -823,7 +846,14 @@ class CodexMonitorState {
 
       if (!this.autoRunningRef.value) break;
 
-      if (cleanableNames.length > 0) {
+      this.autoDeleteTotal.value = 0;
+      this.autoDeleteProcessed.value = 0;
+
+      if (cleanableNames.length > 0 && !shouldAutoDeleteExpired) {
+        appendResultMessage(`发现 ${cleanableNames.length} 个失效账号，自动删除已关闭`, "warning");
+      }
+
+      if (shouldAutoDeleteExpired && cleanableNames.length > 0) {
         this.autoRunStatus.value = "deleting";
         this.autoDeleteTotal.value = cleanableNames.length;
         this.autoDeleteProcessed.value = 0;
@@ -875,6 +905,7 @@ class CodexMonitorState {
       this.autoLastDurationMs.value = durationMs;
       this.autoLastResult.value = {
         scanned: files.length,
+        expired: cleanableNames.length,
         deleted: deletedCount,
         disabled: toggleDisabledCount,
         enabled: toggleEnabledCount,
@@ -884,6 +915,7 @@ class CodexMonitorState {
         {
           timestamp: roundStart,
           scanned: files.length,
+          expired: cleanableNames.length,
           deleted: deletedCount,
           disabled: toggleDisabledCount,
           enabled: toggleEnabledCount,
